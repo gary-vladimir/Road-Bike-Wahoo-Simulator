@@ -28,11 +28,23 @@ Alternatively, open the repository in a Dev Containers-compatible editor and cho
 
 In Chrome on this Mac, open **Trainer → Pair KICKR via Bluetooth**, select the trainer, and pedal gently. macOS/Chrome may request Bluetooth permission. The diagnostic screen reports fresh watts, available cadence/speed, features, supported power range, and connection events.
 
-This build **cannot send trainer control commands**. It subscribes to telemetry and reads FTMS characteristics. There is no control-point write path, calibration command, reset command, or firmware update functionality. Notification subscription configures Bluetooth notifications but does not set workout load.
+The default configuration **disables trainer control**. Pairing subscribes to telemetry and reads FTMS characteristics; it never sets workout load. There are no calibration, reset, or firmware update commands.
 
 After pairing and entering your known FTP, choose **KICKR · live power, read-only** to ride the scene using actual power. Targets are guidance; trainer resistance remains unchanged by BikeSIM. Virtual speed is estimated from power, entered mass, and visual grade; trainer-reported speed is shown only in diagnostics. Fresh power is required; losing it pauses the ride.
 
 Automatic ERG/SIM resistance control and Wi-Fi transport are not implemented yet. See [hardware validation](docs/HARDWARE_TESTS.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+
+## Supervised ERG pilot
+
+A separate diagnostic pilot is available for the hardware validation described in HT-2. Stop the existing BikeSIM development server before starting this opt-in server:
+
+```sh
+docker compose -f .devcontainer/compose.yaml exec -e VITE_TRAINER_CONTROL=pilot bikesim npm run dev
+```
+
+Reload Chrome and open **Trainer**. Pairing remains read-only. Only the rider's readiness checkbox followed by **Start 50 W test** begins control. This test requires fresh power/cadence and at least 50 rpm, limits targets to 50–100 W, and ramps changes by at most 10 W per second. Stop, visibility loss, stale telemetry, or low cadence ends the test with a best-effort standard stop command followed by disconnect. An acknowledged stop does not prove physical unloading. A disconnected or crashed browser cannot guarantee reduced resistance. Reconnect and open a new test panel to re-arm.
+
+Hot replacement is disabled in pilot mode so edits cannot replace an active controller. Reload only after stopping the test. The Compose default remains `off`; automatic workout resistance is still unavailable. Export the separate control test log from the test panel.
 
 ## Checks
 

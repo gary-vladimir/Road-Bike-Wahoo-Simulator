@@ -30,9 +30,9 @@ ROUVY informed the library → workout detail → ride flow, editable interval d
 
 ## Corrections to the other plan
 
-The proposed universal “safe state” was too strong: a crashed process or broken connection cannot reliably send a shutdown command, and SIM 0% is not inherently an unloaded physical stop. Neither the process watchdog nor a reset-on-exit can guarantee a resistance reduction. This release therefore contains no actual load-control write path. Future recovery behavior must be verified on the exact trainer, including failed writes and lost connections.
+The proposed universal “safe state” was too strong: a crashed process or broken connection cannot reliably send a shutdown command, and SIM 0% is not inherently an unloaded physical stop. Neither the process watchdog nor a reset-on-exit can guarantee a resistance reduction. Control therefore remains disabled by default; a separate opt-in, explicitly armed diagnostic pilot supports only bounded ERG testing. Recovery behavior must be verified on the exact trainer, including failed writes and lost connections.
 
-Capabilities and target ranges are discovered, not assumed from the model name. The other plan's opcode table is not treated as an executable specification. Before writes are implemented, verify byte widths, scaling, allowable modes, acknowledgements, and the chosen stop behavior against the Bluetooth SIG specification and actual device responses.
+Capabilities and target ranges are discovered, not assumed from the model name. The other plan's opcode table is not treated as an executable specification. Standard ERG pilot payloads and responses have been checked against protocol documentation; actual acknowledgements and stop behavior remain the HT-2 gate.
 
 The Direct Connect description is community documentation, not an official guarantee of CORE 2 support or Docker discovery. Adding a backend solely for unverified Wi-Fi would delay a testable simulator. Bluetooth is the bounded first integration. Sources: [Chrome Web Bluetooth](https://developer.chrome.com/docs/capabilities/bluetooth), [Bluetooth SIG FTMS](https://www.bluetooth.com/specifications/specs/fitness-machine-service-1-0/), [community Direct Connect documentation](https://github.com/elfrances/wahoo-fitness-tnp).
 
@@ -47,11 +47,12 @@ The Direct Connect description is community documentation, not an official guara
 - Session checkpointing every five seconds, history, interrupted-session recognition, summaries, CSV/JSON downloads, and versioned backup/import.
 - Settings for FTP, virtual rider mass, and graphics quality.
 - Unit tests and container browser workflow tests.
+- Opt-in supervised 50–100 W ERG pilot with serialized acknowledged commands, browser-tab ownership, cadence/freshness/timing guards, gradual target changes, stop priority, and an exportable audit log. No automatic workout control.
 
 ## Still gated or deferred
 
-- **Actual KICKR validation:** requires selecting the device and pedaling on this Mac. No synthetic fixture proves physical device behavior.
-- **Automatic ERG/SIM:** not implemented or enabled; implement and fault-test the control supervisor before a supervised low-load test.
+- **Actual KICKR validation:** read-only pairing and pedaling confirmed on this Mac. Reconnect/fault and physical load responses still require hardware observations.
+- **Automatic ERG/SIM:** not implemented or enabled; the separate low-load ERG pilot is ready for supervised HT-2. SIM remains deferred.
 - **Wi-Fi:** not implemented; no trainer IP or LAN-wide scanning performed.
 - **Performance:** software-rendered container checks do not establish 60 fps on the actual Mac/external display.
 - **Route realism:** procedural landscape only. Real route geometry/elevation, GPX, licensed terrain, and Blender assets remain later milestones.
@@ -62,10 +63,10 @@ Periodic checkpoints currently save a complete session snapshot; chunked recordi
 
 ## Verification completed
 
-The 23 unit tests pass, covering FTMS parsing, the no-control-write adapter boundary, connection cleanup, interval boundaries/ramps, pause/resume, stale power, a six-hour simulated ride, IndexedDB round-trip, interrupted-session recovery, and atomic backup validation. All four browser workflows pass: custom workout persistence, full countdown/pause/resume/finish/history, settings/backup, and narrow-screen controls. TypeScript, production build, and formatting checks pass.
+The 40 unit tests pass, covering FTMS parsing, the no-control-write pairing boundary, connection cleanup, interval boundaries/ramps, pause/resume, stale power, a six-hour simulated ride, IndexedDB round-trip, interrupted-session recovery, atomic backup validation, serialized command acknowledgements, refusal/timeouts, stalled writes, ramp limits, exclusive pilot ownership, visibility loss, and asynchronous stop cleanup. All four default browser workflows pass: custom workout persistence, full countdown/pause/resume/finish/history, settings/backup, and narrow-screen controls. A fifth browser workflow passes against synthetic GATT in pilot mode: readiness gate, read-only pairing, 50→75 W ramp, stop, and audit export. TypeScript, production build, and formatting checks pass.
 
 Initial scene compilation now precedes the workout countdown. Idle scenes stop continuously rendering; low graphics mode reduces resolution/detail/frame rate and removes backdrop blur. These changes allow the complete ride workflow to pass in software-rendered container Chromium without loosening the timing-fault guard. Local Chrome visual review also found and corrected overlapping road-surface layers.
 
 ## Next implementation step
 
-Complete HT-1 in `HARDWARE_TESTS.md`. Use its actual capabilities and observations to implement a mock-tested, serialized, bounded control supervisor and protocol acknowledgements. Keep control unavailable until HT-2 confirms low-load behavior with the rider present. Then integrate validated ERG into the existing workout engine; retain read-only and demo as explicit alternatives.
+Complete the supervised HT-2 pilot in `HARDWARE_TESTS.md` with the rider explicitly starting the test. Record actual acknowledgements and physical resistance/stop feedback. Then integrate validated ERG into the existing workout engine; retain read-only and demo as explicit alternatives.

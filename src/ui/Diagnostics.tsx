@@ -2,7 +2,9 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Bluetooth, Cable, Download, ShieldCheck, Unplug } from 'lucide-react';
 import { trainer } from '../trainer/bluetooth';
 import { download } from '../storage/store';
+import PowerPilot from './PowerPilot';
 export default function Diagnostics() {
+  const pilotAvailable = import.meta.env.VITE_TRAINER_CONTROL === 'pilot';
   const device = useSyncExternalStore(trainer.subscribe, trainer.getSnapshot);
   const [now, setNow] = useState(performance.now());
   useEffect(() => {
@@ -19,7 +21,7 @@ export default function Diagnostics() {
           <p>Read live metrics from your KICKR CORE 2.</p>
         </div>
         <span className="pill">
-          <ShieldCheck size={15} /> Read-only
+          <ShieldCheck size={15} /> {pilotAvailable ? 'Manual control test available' : 'Read-only'}
         </span>
       </div>
       <div className="two-columns">
@@ -39,7 +41,8 @@ export default function Diagnostics() {
               </strong>
             </span>
             <span>
-              Trainer control<strong>Disabled</strong>
+              Trainer control
+              <strong>{pilotAvailable ? 'Explicit test start required' : 'Disabled'}</strong>
             </span>
             <span>
               Transport<strong>Bluetooth · FTMS</strong>
@@ -120,6 +123,7 @@ export default function Diagnostics() {
           </div>
         </section>
       </div>
+      {pilotAvailable && <PowerPilot />}
       <section className="panel diagnostics-log">
         <div className="section-title">
           <h2>Connection log</h2>
@@ -129,7 +133,14 @@ export default function Diagnostics() {
               download(
                 'bikesim-diagnostics.json',
                 JSON.stringify(
-                  { ...device, telemetry: device.telemetry, controlWrites: 0 },
+                  {
+                    ...device,
+                    telemetry: device.telemetry,
+                    telemetryAdapterWrites: 0,
+                    controlAudit: pilotAvailable
+                      ? 'Export separately from the supervised test panel'
+                      : 'Control disabled',
+                  },
                   null,
                   2,
                 ),

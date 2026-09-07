@@ -30,6 +30,22 @@ export class BluetoothTrainer {
     };
   };
   getSnapshot = () => this.snapshot;
+  getPilotDevice() {
+    if (import.meta.env.VITE_TRAINER_CONTROL !== 'pilot')
+      throw new Error('Control is disabled in this build.');
+    if (
+      !this.device ||
+      this.snapshot.status !== 'connected' ||
+      !this.snapshot.features?.erg ||
+      !this.snapshot.range
+    )
+      throw new Error('Connect an ERG-capable trainer with a known power range first.');
+    return {
+      device: this.device,
+      range: this.snapshot.range,
+      telemetry: () => this.snapshot.telemetry,
+    };
+  }
   private update(patch: Partial<DeviceSnapshot>) {
     this.snapshot = { ...this.snapshot, ...patch };
     this.listeners.forEach((fn) => fn());
@@ -60,7 +76,7 @@ export class BluetoothTrainer {
       telemetry: { receivedAt: 0 },
       message: 'Trainer disconnected. Reconnect deliberately when ready.',
     });
-    this.log('Disconnected. No control commands were sent.');
+    this.log('Bluetooth disconnected. Telemetry is unavailable.');
   };
   async connect() {
     if (this.snapshot.status === 'connecting' || this.snapshot.status === 'connected') return;
@@ -136,3 +152,4 @@ export class BluetoothTrainer {
   }
 }
 export const trainer = new BluetoothTrainer();
+if (import.meta.hot) import.meta.hot.dispose(() => trainer.disconnect());

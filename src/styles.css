@@ -548,3 +548,24 @@ footer > span:last-child {
     display: none;
   }
 }
+.power-pilot {
+  margin-top: 24px;
+  border-color: #64733d;
+}
+.pilot-consent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  cursor: pointer;
+}
+.pilot-consent input {
+  width: 20px;
+  height: 20px;
+  accent-color: #d4f76d;
+}
+.pilot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
