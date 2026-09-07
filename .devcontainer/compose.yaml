@@ -8,13 +8,13 @@ services:
     working_dir: /workspace
     command: sleep infinity
     ports:
-      - "127.0.0.1:5186:5173"
+      - '127.0.0.1:5186:5173'
     volumes:
       - ..:/workspace
       - bikesim_modules:/workspace/node_modules
       - bikesim_browser_cache:/root/.cache/ms-playwright
     environment:
-      VITE_TRAINER_CONTROL: "off"
+      VITE_TRAINER_CONTROL: 'off'
 volumes:
   bikesim_modules:
   bikesim_browser_cache:
