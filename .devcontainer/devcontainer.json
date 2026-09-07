@@ -1,0 +1,9 @@
+{
+  "name": "BikeSIM",
+  "dockerComposeFile": "compose.yaml",
+  "service": "bikesim",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "postCreateCommand": "npm ci",
+  "customizations": { "vscode": { "extensions": ["dbaeumer.vscode-eslint"] } }
+}
