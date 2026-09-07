@@ -1,6 +1,7 @@
 import { ControlQueue, encodeControl, type ControlLimits } from '../trainer/control';
 import type { Telemetry } from '../trainer/ftms';
-export type PilotState = 'idle' | 'arming' | 'running' | 'stopping' | 'stopped' | 'faulted';
+export type PilotState =
+  'idle' | 'waiting' | 'arming' | 'running' | 'stopping' | 'stopped' | 'faulted';
 /** Bounded ERG pilot; ordinary workouts never construct this supervisor. */
 export class PowerSupervisor {
   state: PilotState = 'idle';
@@ -11,6 +12,7 @@ export class PowerSupervisor {
   private updating = false;
   private claimed = false;
   private finishing?: Promise<void>;
+  stopConfirmed = false;
   constructor(
     private queue: ControlQueue,
     private limits: ControlLimits,
@@ -38,7 +40,8 @@ export class PowerSupervisor {
     if (t.cadence < 50) throw new Error('Cadence below pilot minimum: 50 rpm');
   }
   async arm() {
-    if (this.state !== 'idle') throw new Error('A new control session is required to re-arm');
+    if (!['idle', 'waiting'].includes(this.state))
+      throw new Error('A new control session is required to re-arm');
     this.guard();
     encodeControl({ kind: 'power', watts: 50 }, this.limits);
     const generation = ++this.generation;
@@ -59,6 +62,14 @@ export class PowerSupervisor {
       this.applied = 50;
     } catch (error) {
       if (generation === this.generation) await this.fault((error as Error).message);
+    }
+  }
+  preflight(): string | null {
+    try {
+      this.guard();
+      return null;
+    } catch (error) {
+      return (error as Error).message;
     }
   }
   async update(target: number) {
@@ -114,8 +125,9 @@ export class PowerSupervisor {
   }
   stop(): Promise<void> {
     if (this.finishing) return this.finishing;
-    if (this.state === 'idle') {
+    if (this.state === 'idle' || this.state === 'waiting') {
       this.state = 'stopped';
+      this.message = 'Test cancelled. No resistance commands were sent.';
       return Promise.resolve();
     }
     if (this.state === 'stopped' || this.state === 'faulted') return Promise.resolve();
@@ -127,6 +139,7 @@ export class PowerSupervisor {
   private async finishStop() {
     try {
       await this.queue.stop();
+      this.stopConfirmed = true;
       this.state = 'stopped';
       this.message = 'Stop acknowledged. Physical unloading still requires hardware validation.';
     } catch (error) {
@@ -146,6 +159,7 @@ export class PowerSupervisor {
     if (this.claimed) {
       try {
         await this.queue.stop();
+        this.stopConfirmed = true;
         this.message += ' Stop acknowledged; physical load is not verified.';
       } catch {
         this.message += ' Stop could not be confirmed; physical load state is unknown.';

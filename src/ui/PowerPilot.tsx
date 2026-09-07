@@ -1,40 +1,69 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Download, Square } from 'lucide-react';
 import { ErgPilot, type PilotSnapshot } from '../trainer/pilot';
 import { trainer } from '../trainer/bluetooth';
 import { download } from '../storage/store';
-export default function PowerPilot() {
+const initial = (): PilotSnapshot => ({ state: 'idle', applied: 50, message: '', audit: [] });
+type Props = {
+  registerStop: (stop: (() => Promise<void>) | null) => void;
+  onActiveChange: (active: boolean) => void;
+};
+export default function PowerPilot({ registerStop, onActiveChange }: Props) {
+  const device = useSyncExternalStore(trainer.subscribe, trainer.getSnapshot);
   const [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
-  const [snapshot, setSnapshot] = useState<PilotSnapshot>({
-    state: 'idle',
-    applied: 50,
-    message: '',
-    audit: [],
-  });
-  const pilot = useRef<ErgPilot | null>(null);
-  const mounted = useRef(true);
+  const [snapshot, setSnapshot] = useState<PilotSnapshot>(initial);
+  const pilot = useRef<ErgPilot | null>(null),
+    mounted = useRef(true),
+    attempt = useRef(0);
+  const stop = useCallback(async () => {
+    if (pilot.current) {
+      await pilot.current.stop();
+      return;
+    }
+    ++attempt.current;
+    setBusy(false);
+    setReady(false);
+    setSnapshot({
+      ...initial(),
+      state: 'stopped',
+      message: 'Test cancelled. No resistance commands were sent.',
+    });
+  }, []);
   useEffect(() => {
     mounted.current = true;
+    registerStop(stop);
     return () => {
       mounted.current = false;
+      ++attempt.current;
+      registerStop(null);
       void pilot.current?.stop();
     };
-  }, []);
-  const active = snapshot.state === 'running' || busy;
+  }, [registerStop, stop]);
+  const active = busy || ['waiting', 'arming', 'running', 'stopping'].includes(snapshot.state);
+  useEffect(() => {
+    onActiveChange(active);
+  }, [active, onActiveChange]);
+  const acknowledged = snapshot.audit
+    .filter(
+      (entry) => entry.event === 'acknowledgement' && entry.bytes?.[0] === 5 && entry.result === 1,
+    )
+    .at(-1)?.bytes;
+  const acknowledgedWatts = acknowledged ? acknowledged[1] | (acknowledged[2] << 8) : null;
   return (
     <section className="panel power-pilot">
       <div className="eyebrow">SUPERVISED HARDWARE CHECK</div>
       <h2>Try a small resistance change.</h2>
       <p>
-        This test changes trainer resistance. It starts at 50 W and is limited to 100 W, with
-        gradual increases. Keep pedaling above 50 rpm. Keyboard Stop: Space or Escape.
+        Click Start, then pedal up to 50 rpm. The test waits without changing resistance until fresh
+        power and cadence arrive. It starts at 50 W, with gradual changes up to 100 W. Space or
+        Escape stops the test.
       </p>
       <p>
-        Stop sends the standard trainer stop command and disconnects. An acknowledgement does not
-        prove resistance dropped; confirm the physical response. If communication fails, load may
-        remain.
+        Stop cancels a waiting test or sends the trainer stop command. Telemetry stays connected
+        after an acknowledged stop. If a command fails, the connection may close and load may
+        remain; an acknowledgement alone does not prove physical unloading.
       </p>
       <label className="pilot-consent">
         <input
@@ -48,24 +77,32 @@ export default function PowerPilot() {
       <div className="pilot-actions">
         <button
           className="primary"
-          disabled={!ready || active || snapshot.state !== 'idle'}
+          disabled={!ready || active || device.status !== 'connected'}
           onClick={async () => {
+            const current = ++attempt.current;
+            pilot.current = null;
             setBusy(true);
             setError('');
+            setSnapshot(initial());
             try {
               const session = await ErgPilot.prepare(trainer.getPilotDevice(), (state) => {
-                if (mounted.current) setSnapshot(state);
+                if (!mounted.current || attempt.current !== current) return;
+                setSnapshot(state);
+                if (state.state === 'stopped' || state.state === 'faulted') setReady(false);
               });
-              if (!mounted.current) {
+              if (!mounted.current || attempt.current !== current) {
                 await session.stop();
                 return;
               }
               pilot.current = session;
               await session.start();
             } catch (err) {
-              setError((err as Error).message);
+              if (mounted.current && attempt.current === current) {
+                setError((err as Error).message);
+                setReady(false);
+              }
             } finally {
-              if (mounted.current) setBusy(false);
+              if (mounted.current && attempt.current === current) setBusy(false);
             }
           }}
         >
@@ -83,20 +120,18 @@ export default function PowerPilot() {
         ))}
         <button
           className="stop-button"
-          disabled={!pilot.current}
-          onClick={() => void pilot.current?.stop()}
+          disabled={!active || snapshot.state === 'stopping'}
+          onClick={() => void stop()}
         >
-          <Square size={15} /> Stop trainer test
+          <Square size={15} />
+          {snapshot.state === 'stopping' ? 'Stopping trainer…' : 'Stop trainer test'}
         </button>
       </div>
       <p role="status">
-        {busy ? 'Checking and arming…' : snapshot.state} ·{' '}
-        {snapshot.audit.some(
-          (entry) =>
-            entry.event === 'acknowledgement' && entry.bytes?.[0] === 5 && entry.result === 1,
-        )
-          ? `last acknowledged target ${snapshot.applied} W`
-          : 'no power target acknowledged'}
+        {busy && snapshot.state === 'idle' ? 'Preparing test…' : snapshot.state} ·{' '}
+        {acknowledgedWatts === null
+          ? 'no power target acknowledged'
+          : `last acknowledged target ${acknowledgedWatts} W`}
       </p>
       {snapshot.message && <p role="status">{snapshot.message}</p>}
       {error && (
@@ -104,6 +139,7 @@ export default function PowerPilot() {
           {error}
         </p>
       )}
+      {device.status !== 'connected' && <p>Connect the trainer above before starting a test.</p>}
       {snapshot.audit.length > 0 && (
         <button
           className="secondary"

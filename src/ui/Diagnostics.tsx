@@ -1,10 +1,15 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Bluetooth, Cable, Download, ShieldCheck, Unplug } from 'lucide-react';
 import { trainer } from '../trainer/bluetooth';
 import { download } from '../storage/store';
 import PowerPilot from './PowerPilot';
 export default function Diagnostics() {
   const pilotAvailable = import.meta.env.VITE_TRAINER_CONTROL === 'pilot';
+  const stopTest = useRef<(() => Promise<void>) | null>(null);
+  const registerStop = useCallback((stop: (() => Promise<void>) | null) => {
+    stopTest.current = stop;
+  }, []);
+  const [pilotActive, setPilotActive] = useState(false);
   const device = useSyncExternalStore(trainer.subscribe, trainer.getSnapshot);
   const [now, setNow] = useState(performance.now());
   useEffect(() => {
@@ -28,7 +33,11 @@ export default function Diagnostics() {
         <section className="panel">
           <Bluetooth size={32} className="lime" />
           <h2>{device.name}</h2>
-          <p role="status">{device.message}</p>
+          <p role="status">
+            {pilotActive
+              ? 'Supervised test active. See test status and Stop controls below.'
+              : device.message}
+          </p>
           <div className="connection-facts">
             <span>
               Status
@@ -49,7 +58,13 @@ export default function Diagnostics() {
             </span>
           </div>
           {device.status === 'connected' ? (
-            <button className="secondary" onClick={() => trainer.disconnect()}>
+            <button
+              className="secondary"
+              onClick={async () => {
+                await stopTest.current?.();
+                trainer.disconnect();
+              }}
+            >
               <Unplug size={16} /> Disconnect
             </button>
           ) : (
@@ -66,6 +81,13 @@ export default function Diagnostics() {
             Use Chrome on this Mac. Choose your trainer in the browser window. Pairing does not
             change resistance.
           </p>
+          {device.status !== 'connected' &&
+            device.status !== 'connecting' &&
+            device.canReconnect && (
+              <button className="secondary" onClick={() => void trainer.connect('reconnect')}>
+                Reconnect KICKR
+              </button>
+            )}
         </section>
         <section className="panel">
           <h2>Live readings</h2>
@@ -123,7 +145,7 @@ export default function Diagnostics() {
           </div>
         </section>
       </div>
-      {pilotAvailable && <PowerPilot />}
+      {pilotAvailable && <PowerPilot registerStop={registerStop} onActiveChange={setPilotActive} />}
       <section className="panel diagnostics-log">
         <div className="section-title">
           <h2>Connection log</h2>

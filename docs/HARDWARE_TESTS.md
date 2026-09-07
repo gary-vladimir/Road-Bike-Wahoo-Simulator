@@ -24,14 +24,22 @@ Status: **mock-tested pilot implemented; physical test pending**. Default builds
 Implemented prerequisites: HT-1 recorded, actual supported ranges known, request/power/start/stop payloads checked, an exclusive browser lock, serialized writes with matching indications, 2.5-second acknowledgement timeout without retries, fresh power/cadence guards, minimum 50 rpm cadence, 100 W pilot ceiling, 10 W/second ramp limit, stop priority, and synthetic fault tests. This tab lock cannot exclude Wahoo or other native controllers. The rider must be present and ready before any load changes.
 
 1. Start the opt-in pilot server using the README command, reload Chrome, and open Trainer. Close any other app's active trainer-control session if it prevents control acquisition.
-2. Pair, pedal above 50 rpm, and confirm fresh readings. The rider selects the readiness checkbox and clicks **Start 50 W test**. Confirm the displayed acknowledgement and a comfortable physical load.
+2. Pair and confirm fresh readings. The rider selects the readiness checkbox and clicks **Start 50 W test**. At zero cadence it should say waiting and remain connected; Stop should cancel without sending any resistance command. Start again, pedal above 50 rpm, and confirm the displayed acknowledgement and a comfortable physical load.
 3. If comfortable, select **75 W**, maintain cadence, and check that resistance changes gradually. Testing 100 W is optional.
-4. Select **Stop trainer test** while pedaling. Record whether the standard stop was acknowledged and how the physical resistance felt afterward. Stop concludes the session and disconnects; no automatic resumption occurs.
+4. Select **Stop trainer test** while pedaling. Record whether the standard stop was acknowledged and how the physical resistance felt afterward. Stop concludes the test and retains telemetry after a successful acknowledgement; no automatic resumption occurs. A failure to confirm Stop can disconnect with an explicit unknown-load message.
 5. Export the control log. Record the rider's observations separately; command acknowledgements alone do not establish load response.
 
 No SIM commands are included in this pilot. Do not assume FTMS Reset or flat SIM unloads the trainer. Do not deliberately kill a controlling process under load until the fallback behavior has been established and the supervised test protocol accounts for retained resistance. If the physical response is uncomfortable or uncertain, end the test; do not escalate the target to diagnose it.
 
 Protocol references: [Bluetooth SIG FTMS](https://www.bluetooth.com/specifications/specs/fitness-machine-service-1-0-1/) and [Huawei FTMS control-point implementation documentation](https://developer.huawei.com/consumer/fr/doc/HMSCore-Guides/fmcp-0000001050147089). Request Control `00`; Target Power `05` + signed little-endian watts; Start `07`; Stop `08 01`; response `80` + requested opcode + result (`01` success). These protocol checks do not substitute for the physical stop test.
+
+### September 7 bug report and correction
+
+The rider reported immediate disconnect on Start, ineffective Stop afterward, and lost connection on refresh. Native Chrome inspection showed `faulted · no power target acknowledged` with `Cadence below pilot minimum: 50 rpm`. Initial cadence validation had incorrectly led to full connection cleanup and left the UI attached to a disposed session. This was a software lifecycle bug, not evidence of a trainer refusal.
+
+Start now waits for pedaling; cancellation and acknowledged stops retain telemetry; Stop is available during preparation/waiting and shows its result; fresh attempts no longer require a page reload. The upper Disconnect button stops an active test first. Synthetic unit and browser regressions cover these cases.
+
+Read-only pairing was repeated successfully with the actual KICKR after the fix. Refresh was then tested without any resistance commands: Chrome did not restore the saved permission, and the new explicit Pair fallback appeared. Automatic refresh restoration passes with synthetic saved permissions but remains unavailable in this Mac's observed browser configuration. Physical load and Stop response still need a fresh rider check.
 
 ## HT-3 — First controlled workout
 

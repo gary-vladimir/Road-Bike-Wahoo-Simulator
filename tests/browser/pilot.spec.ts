@@ -1,17 +1,23 @@
 import { test, expect } from '@playwright/test';
 
-test('supervised pilot requires readiness and stops acknowledged mock hardware', async ({
-  page,
-}) => {
+test.beforeEach(async ({ page }) => {
   test.skip(process.env.VITE_TRAINER_CONTROL !== 'pilot', 'Requires the opt-in pilot server');
   await page.addInitScript(() => {
     const writes: number[][] = [];
     Object.assign(window, { mockControlWrites: writes });
+    Object.assign(window, { mockCadence: 80, mockDelayPrepare: false });
     const data = Object.assign(new EventTarget(), {
       uuid: 'indoor-bike-data',
       value: new DataView(Uint8Array.of(0x44, 0, 0, 0, 160, 0, 50, 0).buffer),
       startNotifications: async () => {
-        setInterval(() => data.dispatchEvent(new Event('characteristicvaluechanged')), 200);
+        setInterval(() => {
+          data.value.setUint16(
+            4,
+            (window as unknown as { mockCadence: number }).mockCadence * 2,
+            true,
+          );
+          data.dispatchEvent(new Event('characteristicvaluechanged'));
+        }, 200);
         return data;
       },
     });
@@ -29,7 +35,11 @@ test('supervised pilot requires readiness and stops acknowledged mock hardware',
     });
     const status = Object.assign(new EventTarget(), {
       uuid: 'fitness-machine-status',
-      startNotifications: async () => status,
+      startNotifications: async () => {
+        if ((window as unknown as { mockDelayPrepare: boolean }).mockDelayPrepare)
+          await new Promise((resolve) => setTimeout(resolve, 700));
+        return status;
+      },
     });
     const service = {
       getCharacteristics: async () => [data, point, status],
@@ -48,6 +58,7 @@ test('supervised pilot requires readiness and stops acknowledged mock hardware',
     };
     const device = Object.assign(new EventTarget(), {
       name: 'KICKR SYNTHETIC',
+      id: 'synthetic-trainer',
       gatt: {
         connected: false,
         connect: async () => {
@@ -63,9 +74,22 @@ test('supervised pilot requires readiness and stops acknowledged mock hardware',
     });
     Object.defineProperty(navigator, 'bluetooth', {
       configurable: true,
-      value: { requestDevice: async () => device },
+      value: {
+        requestDevice: async () => {
+          localStorage.setItem(
+            'mockPairCalls',
+            String(Number(localStorage.getItem('mockPairCalls') ?? 0) + 1),
+          );
+          return device;
+        },
+        getDevices: async () => (localStorage.getItem('mockPairCalls') ? [device] : []),
+      },
     });
   });
+});
+test('supervised pilot requires readiness and stops acknowledged mock hardware', async ({
+  page,
+}) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Trainer', exact: true }).click();
   const start = page.getByRole('button', { name: 'Start 50 W test', exact: true });
@@ -101,4 +125,115 @@ test('supervised pilot requires readiness and stops acknowledged mock hardware',
   await page.getByRole('button', { name: 'Export control test log' }).click();
   expect((await download).suggestedFilename()).toBe('bikesim-control-test.json');
   await expect(start).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'I’m on the bike and ready' }).check();
+  await expect(start).toBeEnabled();
+});
+
+test('zero-cadence Start waits, Stop cancels, and retry works without reconnecting', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(() => Object.assign(window, { mockCadence: 0 }));
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await page.getByRole('button', { name: 'Pair KICKR via Bluetooth' }).click();
+  await expect(page.getByText('Live power received', { exact: true })).toBeVisible();
+  const start = page.getByRole('button', { name: 'Start 50 W test', exact: true });
+  const stop = page.getByRole('button', { name: 'Stop trainer test', exact: true });
+  await page.getByRole('checkbox', { name: 'I’m on the bike and ready' }).check();
+  await start.click();
+  await expect(
+    page.getByText('waiting · no power target acknowledged', { exact: true }),
+  ).toBeVisible();
+  await expect(stop).toBeEnabled();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites,
+    ),
+  ).toEqual([]);
+  await stop.click();
+  await expect(
+    page.getByText('Test cancelled. No resistance commands were sent.', { exact: true }),
+  ).toBeVisible();
+  await expect(stop).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'I’m on the bike and ready' }).check();
+  await start.click();
+  await page.evaluate(() => Object.assign(window, { mockCadence: 80 }));
+  await expect(
+    page.getByText('running · last acknowledged target 50 W', { exact: true }),
+  ).toBeVisible();
+  await stop.click();
+  await expect(
+    page.getByText('stopped · last acknowledged target 50 W', { exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('mockPairCalls'))).toBe('1');
+});
+
+test('refresh restores only telemetry; deliberate disconnect survives refresh', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await page.getByRole('button', { name: 'Pair KICKR via Bluetooth' }).click();
+  await expect(page.getByText('Live power received', { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await expect(page.getByText('Live power received', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start 50 W test', exact: true })).toBeDisabled();
+  expect(await page.evaluate(() => localStorage.getItem('mockPairCalls'))).toBe('1');
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites,
+    ),
+  ).toEqual([]);
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await page.reload();
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Pair KICKR via Bluetooth' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toHaveCount(0);
+});
+
+test('Disconnect stops an active test before dropping Bluetooth and reconnect needs no chooser', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await page.getByRole('button', { name: 'Pair KICKR via Bluetooth' }).click();
+  await expect(page.getByText('Live power received', { exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'I’m on the bike and ready' }).check();
+  await page.getByRole('button', { name: 'Start 50 W test', exact: true }).click();
+  await expect(
+    page.getByText('running · last acknowledged target 50 W', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites,
+    ),
+  ).toEqual([[0], [5, 50, 0], [7], [8, 1]]);
+  await page.getByRole('button', { name: 'Reconnect KICKR', exact: true }).click();
+  await expect(page.getByText('Live power received', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('mockPairCalls'))).toBe('1');
+});
+
+test('Stop cancels pending preparation before any control command can start', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => Object.assign(window, { mockDelayPrepare: true }));
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await page.getByRole('button', { name: 'Pair KICKR via Bluetooth' }).click();
+  await expect(page.getByText('Live power received', { exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'I’m on the bike and ready' }).check();
+  await page.getByRole('button', { name: 'Start 50 W test', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop trainer test', exact: true }).click();
+  await expect(
+    page.getByText('Test cancelled. No resistance commands were sent.', { exact: true }),
+  ).toBeVisible();
+  await page.waitForTimeout(900);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites,
+    ),
+  ).toEqual([]);
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
 });

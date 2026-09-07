@@ -57,6 +57,7 @@ export default function App() {
     setSessions(rides);
   };
   useEffect(() => {
+    void trainer.restore();
     void refresh()
       .catch(() =>
         setError(

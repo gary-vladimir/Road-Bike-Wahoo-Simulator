@@ -8,7 +8,18 @@ export type DeviceSnapshot = {
   log: string[];
   features?: ReturnType<typeof decodeFeatures>;
   range?: ReturnType<typeof decodePowerRange>;
+  canReconnect?: boolean;
 };
+const rememberedKey = 'bikesim.trainer.id';
+const restoreKey = 'bikesim.trainer.restore';
+function stored(storage: 'localStorage' | 'sessionStorage', key: string, value?: string) {
+  try {
+    if (value !== undefined) globalThis[storage].setItem(key, value);
+    return globalThis[storage].getItem(key);
+  } catch {
+    return null;
+  }
+}
 const initial = (): DeviceSnapshot => ({
   status: 'offline',
   name: 'KICKR CORE 2',
@@ -23,6 +34,9 @@ export class BluetoothTrainer {
   private listeners = new Set<() => void>();
   private device?: BluetoothDevice;
   private data?: BluetoothRemoteGATTCharacteristic;
+  private remembered?: BluetoothDevice;
+  private generation = 0;
+  private restored = false;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -78,7 +92,12 @@ export class BluetoothTrainer {
     });
     this.log('Bluetooth disconnected. Telemetry is unavailable.');
   };
-  async connect() {
+  async restore() {
+    if (this.restored) return;
+    this.restored = true;
+    if (stored('sessionStorage', restoreKey) === '1') await this.connect('restore');
+  }
+  async connect(mode: 'pair' | 'reconnect' | 'restore' = 'pair') {
     if (this.snapshot.status === 'connecting' || this.snapshot.status === 'connected') return;
     if (!navigator.bluetooth) {
       this.update({
@@ -87,22 +106,55 @@ export class BluetoothTrainer {
       });
       return;
     }
-    this.disconnect();
+    const generation = ++this.generation;
+    this.cleanup();
     this.update({
       ...initial(),
       status: 'connecting',
-      message: 'Choose your KICKR in the browser pairing window.',
+      message:
+        mode === 'pair'
+          ? 'Choose your KICKR in the browser pairing window.'
+          : 'Restoring the trainer connection for telemetry only…',
     });
+    let selected: BluetoothDevice | undefined;
+    const current = () => {
+      if (generation !== this.generation) {
+        selected?.gatt?.disconnect();
+        throw new Error('Connection attempt cancelled');
+      }
+    };
     try {
-      this.device = await navigator.bluetooth.requestDevice({
-        filters: [{ namePrefix: 'KICKR' }, { namePrefix: 'Wahoo' }, { services: [0x1826] }],
-        optionalServices: [0x1826],
-      });
+      if (mode !== 'pair') {
+        const bluetooth = navigator.bluetooth as Bluetooth & {
+          getDevices?: () => Promise<BluetoothDevice[]>;
+        };
+        const devices = this.remembered
+          ? [this.remembered]
+          : ((await bluetooth.getDevices?.()) ?? []);
+        current();
+        selected =
+          devices.find((device) => device.id === stored('localStorage', rememberedKey)) ??
+          this.remembered;
+        if (!selected)
+          throw new Error(
+            'Chrome could not restore the saved Bluetooth permission. Click Pair KICKR via Bluetooth to reconnect.',
+          );
+      } else
+        selected = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'KICKR' }, { namePrefix: 'Wahoo' }, { services: [0x1826] }],
+          optionalServices: [0x1826],
+        });
+      current();
+      this.device = selected;
+      this.remembered = selected;
       this.device.addEventListener('gattserverdisconnected', this.disconnected);
       const server = await this.device.gatt?.connect();
+      current();
       if (!server) throw new Error('The selected device has no Bluetooth GATT server.');
       const service = await server.getPrimaryService(0x1826);
+      current();
       const characteristics = await service.getCharacteristics();
+      current();
       this.update({
         name: this.device.name || 'Selected trainer',
         services: characteristics.map((c) => c.uuid),
@@ -115,25 +167,33 @@ export class BluetoothTrainer {
         try {
           const c = await service.getCharacteristic(uuid);
           const value = await c.readValue();
+          current();
           this.update({ [key]: decoder(value) });
         } catch (e) {
           this.log(`Optional ${uuid.toString(16)} read: ${(e as Error).message}`);
         }
       }
       this.data = await service.getCharacteristic(0x2ad2);
+      current();
       this.data.addEventListener('characteristicvaluechanged', this.notification);
       await this.data.startNotifications();
+      current();
+      stored('localStorage', rememberedKey, this.device.id);
+      stored('sessionStorage', restoreKey, '1');
       this.update({
         status: 'connected',
+        canReconnect: true,
         message:
           'Reading telemetry only. Pedal gently to see live power. Resistance stays under your existing setup.',
       });
       this.log('Indoor Bike Data notifications enabled. Control point untouched.');
     } catch (e) {
-      this.disconnect();
+      if (generation !== this.generation) return;
+      this.cleanup();
       const error = e as Error;
       this.update({
         status: 'error',
+        canReconnect: !!this.remembered,
         message:
           error.name === 'NotFoundError'
             ? 'No trainer selected. Check that the KICKR is awake and nearby, then try again.'
@@ -143,12 +203,22 @@ export class BluetoothTrainer {
     }
   }
   disconnect() {
+    ++this.generation;
+    stored('sessionStorage', restoreKey, '0');
+    this.cleanup();
+    this.update({
+      status: 'offline',
+      telemetry: { receivedAt: 0 },
+      canReconnect: !!this.remembered,
+      message: 'Trainer disconnected. Use Reconnect to resume telemetry.',
+    });
+  }
+  private cleanup() {
     this.data?.removeEventListener('characteristicvaluechanged', this.notification);
     this.device?.removeEventListener('gattserverdisconnected', this.disconnected);
     this.device?.gatt?.disconnect();
     this.data = undefined;
     this.device = undefined;
-    this.update({ status: 'offline', telemetry: { receivedAt: 0 } });
   }
 }
 export const trainer = new BluetoothTrainer();

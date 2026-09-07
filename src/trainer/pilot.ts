@@ -38,6 +38,7 @@ export class ErgPilot {
   private disposed = false;
   private shutdown?: Promise<void>;
   private checking = false;
+  private controlAttempted = false;
   private supervisor: PowerSupervisor;
   private status: BluetoothRemoteGATTCharacteristic;
   private point: BluetoothRemoteGATTCharacteristic;
@@ -89,7 +90,10 @@ export class ErgPilot {
     this.point = point;
     this.status = status;
     const wire: ControlWire = {
-      write: (bytes) => point.writeValueWithResponse(Uint8Array.from(bytes).buffer),
+      write: (bytes) => {
+        this.controlAttempted = true;
+        return point.writeValueWithResponse(Uint8Array.from(bytes).buffer);
+      },
       subscribe: (callback) => {
         const notify = (e: Event) => {
           const value = (e.target as BluetoothRemoteGATTCharacteristic).value;
@@ -143,20 +147,17 @@ export class ErgPilot {
       await this.stop();
       return;
     }
-    try {
-      await this.supervisor.arm();
-    } catch (error) {
-      this.supervisor.state = 'faulted';
-      this.supervisor.message = (error as Error).message;
-    }
+    if (this.supervisor.state !== 'idle') return;
+    this.supervisor.state = 'waiting';
+    this.supervisor.message =
+      'Waiting for pedaling. Reach 50 rpm to begin; no resistance commands sent yet.';
     this.emit();
-    if (this.supervisor.state !== 'running') {
-      await this.shutdown;
-      this.dispose();
-      return;
-    }
     this.timer = setInterval(() => {
       if (this.shutdown || this.disposed) return;
+      if (this.supervisor.state === 'waiting') {
+        void this.tryArm();
+        return;
+      }
       void this.supervisor
         .checkTelemetry()
         .then(async () => {
@@ -176,6 +177,35 @@ export class ErgPilot {
         })
         .catch((error) => this.trip((error as Error).message));
     }, 250);
+    await this.tryArm();
+  }
+  private async tryArm() {
+    if (this.checking || this.disposed || this.shutdown || this.supervisor.state !== 'waiting')
+      return;
+    const reason = this.supervisor.preflight();
+    if (reason) {
+      this.supervisor.message = `Waiting for pedaling: ${reason}. No resistance commands sent yet.`;
+      this.emit();
+      return;
+    }
+    this.checking = true;
+    try {
+      const arming = this.supervisor.arm();
+      this.emit();
+      await arming;
+      const state = this.snapshot().state;
+      if (state === 'running')
+        this.supervisor.message = 'Test running. Use Stop to end resistance control.';
+      this.emit();
+      if (state !== 'running') {
+        await this.shutdown;
+        this.dispose();
+      }
+    } catch (error) {
+      await this.trip((error as Error).message);
+    } finally {
+      this.checking = false;
+    }
   }
   setTarget(watts: number) {
     if (!Number.isInteger(watts) || watts < 50 || watts > 100)
@@ -197,7 +227,9 @@ export class ErgPilot {
     if (this.disposed) return Promise.resolve();
     this.shutdown = (async () => {
       clearInterval(this.timer);
-      await this.supervisor.stop();
+      const stopping = this.supervisor.stop();
+      this.emit();
+      await stopping;
       this.emit();
       this.dispose();
     })();
@@ -213,8 +245,10 @@ export class ErgPilot {
     this.source.device.removeEventListener('gattserverdisconnected', this.disconnect);
     this.status.removeEventListener('characteristicvaluechanged', this.machineStatus);
     this.queue.close();
-    // Disconnect releases this client's control permission; it is not proof of unloading.
-    this.source.device.gatt?.disconnect();
+    // Keep telemetry after cancellation or an acknowledged stop. Drop an uncertain
+    // control session, but never claim disconnection guarantees physical unloading.
+    if (this.controlAttempted && !this.supervisor.stopConfirmed)
+      this.source.device.gatt?.disconnect();
     this.release();
   }
 }

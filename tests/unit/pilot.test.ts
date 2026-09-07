@@ -85,6 +85,10 @@ function fixture() {
     stall: () => {
       cadence = 0;
     },
+    pedal: () => {
+      cadence = 80;
+      stale = false;
+    },
     expire: () => {
       stale = true;
     },
@@ -100,6 +104,39 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe('supervised pilot lifecycle with synthetic GATT only', () => {
+  it('waits at zero cadence, cancels without writes, and can start a fresh test on the same connection', async () => {
+    const f = fixture();
+    f.stall();
+    const pilot = await f.prepare();
+    await pilot.start();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(f.snapshots.at(-1)?.state).toBe('waiting');
+    expect(f.writes).toEqual([]);
+    expect(f.disconnect).not.toHaveBeenCalled();
+    await pilot.stop();
+    expect(f.snapshots.at(-1)?.state).toBe('stopped');
+    await vi.advanceTimersByTimeAsync(0);
+    const retry = await f.prepare();
+    await retry.start();
+    f.pedal();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(f.snapshots.at(-1)?.state).toBe('running');
+    expect(f.writes).toEqual([[0], [5, 50, 0], [7]]);
+    await retry.stop();
+    expect(f.writes.at(-1)).toEqual([8, 1]);
+    expect(f.disconnect).not.toHaveBeenCalled();
+    expect(f.snapshots.at(-1)?.state).toBe('stopped');
+  });
+  it('does not disconnect telemetry when notification setup fails before control starts', async () => {
+    const f = fixture();
+    f.point.startNotifications.mockRejectedValueOnce(new Error('Notification setup failed'));
+    await expect(f.prepare()).rejects.toThrow('Notification setup failed');
+    expect(f.writes).toEqual([]);
+    expect(f.disconnect).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(0);
+    const retry = await f.prepare();
+    await retry.stop();
+  });
   it('continues checking cadence while a power acknowledgement is pending', async () => {
     const f = fixture(),
       pilot = await f.prepare();
@@ -118,7 +155,7 @@ describe('supervised pilot lifecycle with synthetic GATT only', () => {
     expect(f.disconnect).not.toHaveBeenCalled();
     f.ack(8);
     await vi.advanceTimersByTimeAsync(0);
-    expect(f.disconnect).toHaveBeenCalledTimes(1);
+    expect(f.disconnect).not.toHaveBeenCalled();
     expect(f.snapshots.at(-1)?.message).toContain('Cadence below');
     expect(f.writes).toHaveLength(5);
   });
@@ -135,7 +172,7 @@ describe('supervised pilot lifecycle with synthetic GATT only', () => {
     await expect(f.prepare()).rejects.toThrow('Another BikeSIM tab');
     await pilot.stop();
     expect(f.writes).toEqual([]);
-    expect(f.disconnect).toHaveBeenCalledTimes(1);
+    expect(f.disconnect).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(0);
     const again = await f.prepare();
     await again.stop();
@@ -163,7 +200,7 @@ describe('supervised pilot lifecycle with synthetic GATT only', () => {
     expect(f.disconnect).not.toHaveBeenCalled();
     f.ack(8);
     await stopped;
-    expect(f.disconnect).toHaveBeenCalledTimes(1);
+    expect(f.disconnect).not.toHaveBeenCalled();
     expect(f.snapshots.at(-1)?.message).toContain('Stop acknowledged');
     await vi.advanceTimersByTimeAsync(3000);
     expect(f.writes).toHaveLength(4);
@@ -190,7 +227,7 @@ describe('supervised pilot lifecycle with synthetic GATT only', () => {
     f.document.dispatchEvent(new Event('visibilitychange'));
     await vi.advanceTimersByTimeAsync(0);
     expect(f.writes.at(-1)).toEqual([8, 1]);
-    expect(f.disconnect).toHaveBeenCalledTimes(1);
+    expect(f.disconnect).not.toHaveBeenCalled();
     f.document.hidden = false;
     await pilot.start();
     expect(f.writes).toHaveLength(4);
