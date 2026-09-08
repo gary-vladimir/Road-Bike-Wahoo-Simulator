@@ -71,4 +71,4 @@ Initial scene compilation now precedes the workout countdown. Idle scenes stop c
 
 ## Next implementation step
 
-Complete the supervised HT-2 pilot in `HARDWARE_TESTS.md` with the rider explicitly starting the test. Record actual acknowledgements and physical resistance/stop feedback. Then integrate validated ERG into the existing workout engine; retain read-only and demo as explicit alternatives.
+Establish the comfortable baseline described in `TRAINER_SETUP.md` before repeating HT-2. Record actual acknowledgements and physical resistance/stop feedback. The rider clarified that normal riding must preserve outdoor-style physical shifting: prioritize a separately validated SIM/terrain mode for that experience, with ERG retained as an explicit power-workout option. Neither mode should assume that the trainer begins unloaded.

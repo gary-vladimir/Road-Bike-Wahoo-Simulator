@@ -19,7 +19,7 @@ Observations to record: macOS/Chrome versions, device firmware if available thro
 
 ## HT-2 — Supervised low-load ERG control
 
-Status: **mock-tested pilot implemented; physical test pending**. Default builds keep it disabled.
+Status: **mock-tested pilot implemented; physical test pending a known comfortable baseline**. Default builds keep it disabled. Before repeating this test, follow [physical setup and baseline guidance](TRAINER_SETUP.md). The rider reports about 150 W at 50 rpm in the large chainring; the cadence threshold is not evidence of an easy starting load.
 
 Implemented prerequisites: HT-1 recorded, actual supported ranges known, request/power/start/stop payloads checked, an exclusive browser lock, serialized writes with matching indications, 2.5-second acknowledgement timeout without retries, fresh power/cadence guards, minimum 50 rpm cadence, 100 W pilot ceiling, 10 W/second ramp limit, stop priority, and synthetic fault tests. This tab lock cannot exclude Wahoo or other native controllers. The rider must be present and ready before any load changes.
 
