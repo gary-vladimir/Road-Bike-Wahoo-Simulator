@@ -13,10 +13,31 @@ import {
 } from '../../src/storage/store';
 import { RideEngine } from '../../src/ride/engine';
 import { presets } from '../../src/workouts/model';
+import { routes } from '../../src/ride/terrain';
+import { routeWorkout } from '../../src/ui/RoadSetup';
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
 });
 describe('local persistence and backup boundaries', () => {
+  it('round-trips SIM routes with unknown FTP and rejects corrupted terrain atomically', async () => {
+    const e = new RideEngine(routeWorkout(routes[0]), 'demo', null, 75, {
+      route: routes[0],
+      bikeMass: 10,
+    });
+    await saveSession(e.session);
+    const b = await backup();
+    globalThis.indexedDB = new IDBFactory();
+    await restoreBackup(b);
+    expect((await loadSessions())[0]).toMatchObject({
+      mode: 'sim',
+      ftp: null,
+      bikeMass: 10,
+      route: routes[0],
+    });
+    b.sessions[0].route!.points[0].grade = 100;
+    await expect(restoreBackup(b)).rejects.toThrow('route profile');
+    expect((await loadSessions())[0].route?.points[0].grade).toBe(0);
+  });
   it('round-trips custom workouts, profile and ride samples', async () => {
     const workout = { ...structuredClone(presets[0]), id: 'custom-example', custom: true };
     await saveWorkout(workout);

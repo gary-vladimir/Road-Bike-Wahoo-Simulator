@@ -1,6 +1,6 @@
 # BikeSIM
 
-A local, single-rider cycling simulator for the existing road bike and KICKR CORE 2. The first implementation includes a procedural Oaxaca-inspired road, eight workout presets, a workout editor, demo rides, read-only Bluetooth telemetry, and local ride history.
+A local, single-rider cycling simulator for the existing road bike and KICKR CORE 2. SIM road riding is the default experience, with three procedural Oaxaca-inspired routes, free pacing, elevation profiles, and coasting physics. ERG power workouts have their own library with eight presets and an editor. Demo and read-only Bluetooth rides save locally. Automatic terrain resistance is not enabled yet.
 
 ## Run locally — Docker only
 
@@ -18,7 +18,11 @@ Alternatively, open the repository in a Dev Containers-compatible editor and cho
 
 ## Try it
 
-1. Select a workout. **First five minutes** is the shortest supplied preset.
+Start on **Ride**, choose a road, and select **Start road demo**. Adjust demo effort or press **Coast** during the ride. Hills occur at fixed distances; rider effort determines virtual speed. No FTP or cadence target is required. Completion is based on route distance, with a six-hour session limit. Settings exposes the disclosed 75 kg rider and 9 kg bike assumptions used for virtual physics.
+
+For a structured power workout:
+
+1. Open **Workouts** and select a preset. **First five minutes** is the shortest supplied preset.
 2. Choose **Demo · simulated rider** and start. Demo uses an explicitly labeled 200 W FTP example unless you enter your own FTP in Settings.
 3. Follow the countdown, power target, cadence cue, and interval profile. Adjust intensity, pause/resume, or stop with the buttons. `Space` or `Escape` pauses; resuming requires an explicit click.
 4. Finish the ride to see the summary. JSON and CSV downloads are available. History, custom workouts, profile settings, and periodic ride checkpoints persist in IndexedDB.
@@ -30,9 +34,11 @@ In Chrome on this Mac, open **Trainer → Pair KICKR via Bluetooth**, select the
 
 The default configuration **disables trainer control**. Pairing subscribes to telemetry and reads FTMS characteristics; it never sets workout load. There are no calibration, reset, or firmware update commands.
 
-After pairing and entering your known FTP, choose **KICKR · live power, read-only** to ride the scene using actual power. Targets are guidance; trainer resistance remains unchanged by BikeSIM. Virtual speed is estimated from power, entered mass, and visual grade; trainer-reported speed is shown only in diagnostics. Fresh power is required; losing it pauses the ride.
+After pairing, choose **KICKR · live power, read-only** on Ride to explore the road using actual power without an FTP requirement. You choose your cadence and physical gears; BikeSIM does not infer gear position or multiply measured power by a gear ratio. **Resistance remains whatever the trainer was already doing**, so read-only pairing is not an unload operation. See [baseline and physical setup](docs/TRAINER_SETUP.md).
 
-Automatic ERG/SIM resistance control and Wi-Fi transport are not implemented yet. See [hardware validation](docs/HARDWARE_TESTS.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+Live power workouts still require your known FTP. Their targets are guidance. Virtual speed is estimated from power, rider/bike mass, and grade; trainer-reported speed is shown only in diagnostics. Fresh power is required; losing it pauses either kind of ride.
+
+The SIM command encoder and bounded terrain controller are implemented and tested against a synthetic trainer, but are not connected to real Bluetooth. Automatic ERG/SIM ride control and Wi-Fi transport remain unavailable. See [hardware validation](docs/HARDWARE_TESTS.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Supervised ERG pilot
 
@@ -69,4 +75,4 @@ docker compose -f .devcontainer/compose.yaml stop
 
 No accounts, analytics, remote fonts, CDN assets, or automatic uploads. The app runs without internet after setup; development dependencies require internet to install. Local storage is browser-profile storage, not app-level encryption. Download a backup in Settings before clearing browser data or changing browser/profile/origin. Imports merge IDs; matching records are replaced transactionally. A refreshed/closed ride is listed as interrupted and never restarts automatically.
 
-The scene is a procedural workout environment, not a surveyed Oaxaca route. Grade is visual in this release. Real GPX routes, detailed Blender assets, FIT/Strava export, and automatic training prescriptions are not part of this first implementation.
+The scene is a procedural environment, not a surveyed Oaxaca route. Grade affects virtual speed and the scene, but does not yet change physical trainer resistance. Route sessions retain their profile, SIM mode, and mass assumptions in history/backups; their recorded target watts are zero to represent no power prescription. Real GPX routes, detailed Blender assets, FIT/Strava export, and automatic training prescriptions remain future work.

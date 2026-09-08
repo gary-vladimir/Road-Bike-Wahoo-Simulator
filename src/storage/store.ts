@@ -1,8 +1,14 @@
 import { openDB } from 'idb';
 import type { Session } from '../ride/engine';
 import { validateWorkout, type Workout } from '../workouts/model';
-export type Settings = { ftp: number | null; mass: number; quality: 'high' | 'low' };
-export const defaults: Settings = { ftp: null, mass: 75, quality: 'high' };
+import { validateRoute } from '../ride/terrain';
+export type Settings = {
+  ftp: number | null;
+  mass: number;
+  bikeMass?: number;
+  quality: 'high' | 'low';
+};
+export const defaults: Settings = { ftp: null, mass: 75, bikeMass: 9, quality: 'high' };
 const db = () =>
   openDB('bikesim', 1, {
     upgrade(db) {
@@ -12,7 +18,7 @@ const db = () =>
     },
   });
 export async function loadSettings(): Promise<Settings> {
-  return (await (await db()).get('settings', 'rider')) ?? defaults;
+  return { ...defaults, ...(await (await db()).get('settings', 'rider')) };
 }
 export async function saveSettings(settings: Settings) {
   await (await db()).put('settings', settings, 'rider');
@@ -59,6 +65,15 @@ export async function restoreBackup(raw: unknown) {
   b.workouts.forEach(validateWorkout);
   for (const s of b.sessions) {
     validateWorkout(s.workout);
+    if (s.route) validateRoute(s.route);
+    if (
+      (s.mode !== undefined && !['sim', 'erg'].includes(s.mode)) ||
+      (s.route && s.mode !== 'sim') ||
+      (s.mode === 'sim' && !s.route) ||
+      (s.bikeMass !== undefined &&
+        (!Number.isFinite(s.bikeMass) || s.bikeMass < 4 || s.bikeMass > 30))
+    )
+      throw new Error('Invalid session mode or bike mass');
     if (
       typeof s.id !== 'string' ||
       !s.id ||
@@ -73,7 +88,7 @@ export async function restoreBackup(raw: unknown) {
       !['demo', 'bluetooth'].includes(s.source) ||
       !['in-progress', 'completed', 'stopped', 'interrupted'].includes(s.status) ||
       !Array.isArray(s.events) ||
-      !Number.isFinite(s.ftp) ||
+      (s.ftp === null ? !s.route : !Number.isFinite(s.ftp)) ||
       !Number.isFinite(s.mass)
     )
       throw new Error('Invalid session in backup.');
@@ -95,7 +110,11 @@ export async function restoreBackup(raw: unknown) {
     !Number.isFinite(b.settings.mass) ||
     b.settings.mass < 35 ||
     b.settings.mass > 200 ||
-    !['high', 'low'].includes(b.settings.quality)
+    !['high', 'low'].includes(b.settings.quality) ||
+    (b.settings.bikeMass !== undefined &&
+      (!Number.isFinite(b.settings.bikeMass) ||
+        b.settings.bikeMass < 4 ||
+        b.settings.bikeMass > 30))
   )
     throw new Error('Invalid settings in backup.');
   const tx = (await db()).transaction(['workouts', 'sessions', 'settings'], 'readwrite');

@@ -12,6 +12,7 @@ export default function Settings({
 }) {
   const [ftp, setFtp] = useState(settings.ftp?.toString() ?? ''),
     [mass, setMass] = useState(settings.mass.toString()),
+    [bikeMass, setBikeMass] = useState((settings.bikeMass ?? 9).toString()),
     [quality, setQuality] = useState(settings.quality);
   const [message, setMessage] = useState('');
   const input = useRef<HTMLInputElement>(null);
@@ -26,13 +27,21 @@ export default function Settings({
           onSubmit={async (e) => {
             e.preventDefault();
             try {
-              const next = { ftp: ftp.trim() ? Number(ftp) : null, mass: Number(mass), quality };
+              const next = {
+                ftp: ftp.trim() ? Number(ftp) : null,
+                mass: Number(mass),
+                bikeMass: Number(bikeMass),
+                quality,
+              };
               if (
                 (next.ftp !== null &&
                   (!Number.isFinite(next.ftp) || next.ftp < 50 || next.ftp > 600)) ||
                 !Number.isFinite(next.mass) ||
                 next.mass < 35 ||
-                next.mass > 200
+                next.mass > 200 ||
+                !Number.isFinite(next.bikeMass) ||
+                next.bikeMass < 4 ||
+                next.bikeMass > 30
               )
                 throw new Error('Check the FTP and weight ranges.');
               await onSave(next);
@@ -56,8 +65,8 @@ export default function Settings({
               onChange={(e) => setFtp(e.target.value)}
             />
             <small>
-              Leave blank if unknown. Demo mode uses a labeled 200 W example. Live workouts require
-              your own value.
+              Leave blank if unknown. Free SIM road previews do not require FTP. Power workouts use
+              your FTP; workout demos use a labeled 200 W example if blank.
             </small>
           </label>
           <label>
@@ -73,8 +82,25 @@ export default function Settings({
               onChange={(e) => setMass(e.target.value)}
             />
             <small>
-              Used only for estimated virtual speed. 75 kg is the initial simulation assumption;
-              bike weight is 9 kg.
+              Used only for estimated virtual speed. 75 kg is the initial simulation assumption; the
+              bike estimate is editable below.
+            </small>
+          </label>
+          <label>
+            Bike weight (kg)
+            <input
+              aria-label="Bike weight kg"
+              type="number"
+              min={4}
+              max={30}
+              step={0.1}
+              required
+              value={bikeMass}
+              onChange={(e) => setBikeMass(e.target.value)}
+            />
+            <small>
+              9 kg is an estimate, not a measured specification for your bike. Used for virtual
+              physics only.
             </small>
           </label>
           <label>

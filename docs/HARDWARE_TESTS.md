@@ -41,8 +41,14 @@ Start now waits for pedaling; cancellation and acknowledged stops retain telemet
 
 Read-only pairing was repeated successfully with the actual KICKR after the fix. Refresh was then tested without any resistance commands: Chrome did not restore the saved permission, and the new explicit Pair fallback appeared. Automatic refresh restoration passes with synthetic saved permissions but remains unavailable in this Mac's observed browser configuration. Physical load and Stop response still need a fresh rider check.
 
-## HT-3 — First controlled workout
+## HT-3 — Supervised SIM handoff and terrain
 
-Status: **blocked on HT-2**.
+Status: **not ready for a physical test; mock controller implemented only**. No SIM command has been sent to the actual KICKR by this development work. Road previews send no control commands.
+
+Before exposing this pilot, confirm the actual trainer's rider/bike mass configuration, capability checks, exclusive control session, comfortable baseline handoff, and HT-2 Stop observations. The UI must require a fresh explicit rider action. Validate initial flat SIM by physical feel, then small gradual slopes and physical shifting, coasting, Stop, and manual restart before connecting complete routes. A 0% SIM grade is road simulation with rolling/aerodynamic load, not a guaranteed unload. Do not run this proposed test through the ERG controls.
+
+## HT-4 — First controlled ride/workout
+
+Status: **pending HT-2 for ERG and HT-3 for SIM**.
 
 Complete a short workout with warm-up and cooldown. Record acknowledgements, interval alignment, manual pause/stop response, failed command behavior, explicit resumption, and rider feedback. A browser crash/disconnection cannot be reported as a successful stop without observed hardware evidence.

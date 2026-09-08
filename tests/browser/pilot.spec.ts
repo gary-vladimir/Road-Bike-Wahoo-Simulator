@@ -87,6 +87,31 @@ test.beforeEach(async ({ page }) => {
     });
   });
 });
+test('live SIM road preview runs without FTP and sends no resistance commands', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 850 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Graphics quality').selectOption('low');
+  await expect(page.getByLabel('FTP watts')).toHaveValue('');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await page.getByRole('button', { name: 'Pair KICKR via Bluetooth' }).click();
+  await expect(page.getByText('Live power received', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Ride', exact: true }).click();
+  await page.getByLabel('Ride source').selectOption('bluetooth');
+  await page.getByRole('button', { name: 'Start live road preview', exact: true }).click();
+  await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 18000 });
+  await expect(page.getByText('Your effort · no watt target', { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites,
+    ),
+  ).toEqual([]);
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await page.getByRole('button', { name: 'Finish & save ride' }).click();
+});
 test('supervised pilot requires readiness and stops acknowledged mock hardware', async ({
   page,
 }) => {

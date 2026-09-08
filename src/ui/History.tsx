@@ -11,7 +11,7 @@ export function Summary({ session, onBack }: { session: Session; onBack: () => v
   return (
     <main className="content-page summary-page">
       <button className="back-link" onClick={onBack}>
-        <ArrowLeft size={17} /> Back to workouts
+        <ArrowLeft size={17} /> {session.route ? 'Back to roads' : 'Back to workouts'}
       </button>
       <div className="eyebrow">
         {session.source === 'demo'
@@ -21,6 +21,11 @@ export function Summary({ session, onBack }: { session: Session; onBack: () => v
       <h1>{session.status === 'completed' ? 'A ride well spent.' : 'Your ride, recorded.'}</h1>
       <p>
         {session.workout.name} · {new Date(session.startedAt).toLocaleString()} · {session.status}
+      </p>
+      <p>
+        {session.route
+          ? 'SIM terrain preview · free pacing · no resistance commands'
+          : 'ERG workout preview · guided power targets'}
       </p>
       <div className="summary-stats">
         <div>
@@ -105,13 +110,15 @@ function PowerChart({ session }: { session: Session }) {
       aria-label="Recorded power and target over elapsed ride time"
     >
       <line x1="0" x2="1000" y1="180" y2="180" stroke="#465343" />
-      <polyline
-        points={points('target')}
-        fill="none"
-        stroke="#80917d"
-        strokeDasharray="5 5"
-        strokeWidth="2"
-      />
+      {!session.route && (
+        <polyline
+          points={points('target')}
+          fill="none"
+          stroke="#80917d"
+          strokeDasharray="5 5"
+          strokeWidth="2"
+        />
+      )}
       <polyline points={points('power')} fill="none" stroke="#d9ff69" strokeWidth="2.5" />
     </svg>
   );
@@ -143,7 +150,8 @@ export default function History({
               <button className="history-main" onClick={() => onOpen(s)}>
                 <span className="eyebrow">
                   {new Date(s.startedAt).toLocaleDateString()} ·{' '}
-                  {s.source === 'demo' ? 'DEMO' : 'LIVE POWER'} · {s.status}
+                  {s.source === 'demo' ? 'DEMO' : 'LIVE POWER'} · {s.route ? 'SIM' : 'ERG'} ·{' '}
+                  {s.status}
                 </span>
                 <h3>{s.workout.name}</h3>
                 <span>

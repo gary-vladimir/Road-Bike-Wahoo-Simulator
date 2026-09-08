@@ -31,9 +31,11 @@ import WorkoutEditor from './ui/WorkoutEditor';
 import Diagnostics from './ui/Diagnostics';
 import History, { Summary } from './ui/History';
 import Settings from './ui/Settings';
-type Page = 'Workouts' | 'Ride history' | 'Trainer' | 'Settings';
+import RoadSetup, { routeWorkout } from './ui/RoadSetup';
+import type { Route } from './ride/terrain';
+type Page = 'Ride' | 'Workouts' | 'Ride history' | 'Trainer' | 'Settings';
 export default function App() {
-  const [page, setPage] = useState<Page>('Workouts'),
+  const [page, setPage] = useState<Page>('Ride'),
     [selected, setSelected] = useState(presets[0]),
     [filter, setFilter] = useState('All workouts');
   const [settings, setSettings] = useState<RiderSettings>(defaults),
@@ -116,9 +118,33 @@ export default function App() {
         if (settings.ftp === null)
           throw new Error('Enter your known FTP in Settings before starting a live workout.');
       }
-      setEngine(new RideEngine(selected, source, settings.ftp ?? 200, settings.mass));
+      setEngine(
+        new RideEngine(selected, source, settings.ftp ?? 200, settings.mass, {
+          bikeMass: settings.bikeMass ?? 9,
+        }),
+      );
     } catch (e) {
       setError((e as Error).message);
+    }
+  };
+  const startRoad = (route: Route, source: Source) => {
+    setError('');
+    try {
+      if (
+        source === 'bluetooth' &&
+        (device.status !== 'connected' ||
+          device.telemetry.powerAt === undefined ||
+          performance.now() - device.telemetry.powerAt > 3000)
+      )
+        throw new Error('Pair your KICKR in Trainer and confirm fresh power before starting.');
+      setEngine(
+        new RideEngine(routeWorkout(route), source, settings.ftp, settings.mass, {
+          route,
+          bikeMass: settings.bikeMass ?? 9,
+        }),
+      );
+    } catch (error) {
+      setError((error as Error).message);
     }
   };
   if (engine)
@@ -151,18 +177,14 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button
-          onClick={() => navigate('Workouts')}
-          className="brand"
-          aria-label="BikeSIM workouts"
-        >
+        <button onClick={() => navigate('Ride')} className="brand" aria-label="BikeSIM home">
           <Bike size={29} />
           <span>
             BIKE<span>SIM</span>
           </span>
         </button>
         <nav aria-label="Main navigation">
-          {(['Workouts', 'Ride history', 'Trainer', 'Settings'] as Page[]).map((p) => (
+          {(['Ride', 'Workouts', 'Ride history', 'Trainer', 'Settings'] as Page[]).map((p) => (
             <button
               key={p}
               className={page === p && !summary ? 'active' : ''}
@@ -187,7 +209,9 @@ export default function App() {
         </div>
       )}
       {summary ? (
-        <Summary session={summary} onBack={() => navigate('Workouts')} />
+        <Summary session={summary} onBack={() => navigate(summary.route ? 'Ride' : 'Workouts')} />
+      ) : page === 'Ride' ? (
+        <RoadSetup settings={settings} loaded={loaded} onStart={startRoad} />
       ) : page === 'Trainer' ? (
         <Diagnostics />
       ) : page === 'Settings' ? (
@@ -216,7 +240,7 @@ export default function App() {
         <main className="library">
           <div className="page-heading">
             <div>
-              <div className="eyebrow">YOUR TRAINING, YOUR PACE</div>
+              <div className="eyebrow">ERG · STRUCTURED POWER WORKOUTS</div>
               <h1>Find your next ride.</h1>
               <p>A focused workout. An open road. Just you.</p>
             </div>

@@ -36,4 +36,4 @@ Implementation requirements for the next control phase:
 4. Let physical shifts change cadence and pedal force naturally. Do not multiply measured power by a guessed gear ratio or invent a gear-position sensor. A manual drivetrain profile may describe the equipment, but it does not identify the currently selected cog.
 5. Keep workout guidance separate from the control mode: in SIM, the rider shifts/paces to follow a suggested target; in ERG, the trainer pursues the watt target. The current procedural scene is not yet geographically accurate road simulation.
 
-No SIM commands or revised startup-control sequence are implemented by this document. The existing ERG pilot remains a diagnostic step, not the final realistic riding experience.
+The September 8 implementation adds free road previews and a mock-tested SIM command/controller module. Real Bluetooth remains disconnected from that module: baseline and trainer-profile confirmations are not inferred from the app's weight defaults. The existing ERG pilot remains a diagnostic step, not the final realistic riding experience.

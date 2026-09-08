@@ -569,3 +569,43 @@ footer > span:last-child {
   flex-wrap: wrap;
   gap: 10px;
 }
+.route-grid {
+  display: grid;
+  gap: 16px;
+}
+.route-grid .workout-card p {
+  color: #a9b4a5;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.terrain-profile {
+  display: block;
+  width: 100%;
+  height: 100px;
+}
+.demo-effort {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.demo-effort input {
+  width: 130px;
+  accent-color: #d9ff69;
+}
+.route-progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+  align-items: center;
+}
+@media (max-width: 700px) {
+  .topbar nav {
+    overflow-x: auto;
+  }
+  .route-progress {
+    gap: 8px;
+  }
+  .demo-effort {
+    flex-wrap: wrap;
+  }
+}

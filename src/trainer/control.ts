@@ -1,11 +1,61 @@
 /** Bounded commands used only by the explicitly armed diagnostic pilot. */
 export type ControlCommand =
-  { kind: 'request' } | { kind: 'start' } | { kind: 'stop' } | { kind: 'power'; watts: number };
-export type ControlLimits = { min: number; max: number; increment: number; ceiling: number };
+  | { kind: 'request' }
+  | { kind: 'start' }
+  | { kind: 'stop' }
+  | { kind: 'power'; watts: number }
+  | {
+      kind: 'simulation';
+      grade: number;
+      windSpeed: number;
+      rollingResistance: number;
+      windResistance: number;
+    };
+export type ControlLimits = {
+  min: number;
+  max: number;
+  increment: number;
+  ceiling: number;
+  simulation?: { minGrade: number; maxGrade: number };
+};
 export function encodeControl(command: ControlCommand, limits: ControlLimits): Uint8Array {
   if (command.kind === 'request') return Uint8Array.of(0x00);
   if (command.kind === 'start') return Uint8Array.of(0x07);
   if (command.kind === 'stop') return Uint8Array.of(0x08, 0x01);
+  if (command.kind === 'simulation') {
+    const allowed = limits.simulation;
+    const { grade, windSpeed, rollingResistance, windResistance } = command;
+    if (
+      !allowed ||
+      ![
+        allowed.minGrade,
+        allowed.maxGrade,
+        grade,
+        windSpeed,
+        rollingResistance,
+        windResistance,
+      ].every(Number.isFinite) ||
+      allowed.minGrade < -6 ||
+      allowed.maxGrade > 6 ||
+      allowed.minGrade > allowed.maxGrade ||
+      grade < allowed.minGrade ||
+      grade > allowed.maxGrade ||
+      Math.abs(windSpeed) > 10 ||
+      rollingResistance < 0 ||
+      rollingResistance > 0.01 ||
+      windResistance < 0 ||
+      windResistance > 0.6
+    )
+      throw new Error('Simulation command is not authorized or exceeds configured limits');
+    const bytes = new Uint8Array(7),
+      view = new DataView(bytes.buffer);
+    bytes[0] = 0x11;
+    view.setInt16(1, Math.round(windSpeed * 1000), true);
+    view.setInt16(3, Math.round(grade * 100), true);
+    bytes[5] = Math.round(rollingResistance * 10000);
+    bytes[6] = Math.round(windResistance * 100);
+    return bytes;
+  }
   if (command.kind !== 'power') throw new Error('Unsupported control command');
   const { watts } = command;
   if (

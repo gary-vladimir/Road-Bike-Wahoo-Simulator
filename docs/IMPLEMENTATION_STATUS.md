@@ -1,6 +1,6 @@
 # Implementation status and decisions
 
-September 7, 2026. Implements the initial usable slice approved after review of both implementation plans.
+Updated September 8, 2026. Implements the initial usable slice and the rider's SIM-first direction after review of both implementation plans.
 
 ## Useful additions adopted from IMPLEMENTATION_PLAN.md
 
@@ -43,16 +43,20 @@ The Direct Connect description is community documentation, not an official guara
 - Custom workout copies, ramp endpoints, duration/cadence editing, and interval add/remove.
 - Demo ride with countdown, stable first-person scene, live HUD, virtual speed/distance, current/next block, intensity adjustment, and pause/stop/resume.
 - Read-only FTMS Bluetooth adapter with optional feature/range discovery, strict packet parsing, per-field freshness, and diagnostics export.
-- Live-power ride mode with fresh-power/FTP prerequisites and no hardware writes.
+- Live-power workout mode with fresh-power/FTP prerequisites and no hardware writes.
 - Session checkpointing every five seconds, history, interrupted-session recognition, summaries, CSV/JSON downloads, and versioned backup/import.
 - Settings for FTP, virtual rider mass, and graphics quality.
 - Unit tests and container browser workflow tests.
 - Opt-in supervised 50–100 W ERG pilot with serialized acknowledged commands, browser-tab ownership, cadence/freshness/timing guards, gradual target changes, stop priority, and an exportable audit log. No automatic workout control.
+- SIM road selection is the default, with three distance-based procedural routes, elevation profiles, route progress/ascent, and distance-based completion. ERG workouts remain a separate library.
+- Free road rides use adjustable demo effort/coasting or fresh live power with no FTP or prescribed cadence. Virtual physics includes rider/bike mass, grade, rolling resistance, and aerodynamic drag. No gear-position sensor is assumed and measured power is not scaled by gearing.
+- SIM sessions persist their route, mode, mass assumptions, and optional FTP in summaries/history/backups; existing records remain compatible. Settings exposes bike mass with a disclosed 9 kg default.
+- A synthetic-transport SIM controller and FTMS encoder support bounded terrain commands, acknowledged startup/stop, explicit baseline/profile prerequisites, 0.25 percentage-point gradient steps at most once per second, freshness/timing faults, and coasting without the ERG cadence threshold. This controller has no real Bluetooth adapter or ride hookup.
 
 ## Still gated or deferred
 
 - **Actual KICKR validation:** read-only pairing and pedaling confirmed on this Mac. Reconnect/fault and physical load responses still require hardware observations.
-- **Automatic ERG/SIM:** not implemented or enabled; the separate low-load ERG pilot is ready for supervised HT-2. SIM remains deferred.
+- **Automatic ERG/SIM:** actual ride control remains disabled. The separate ERG diagnostic supports supervised HT-2; SIM protocol/control logic is mock-tested only. Baseline handoff, trainer mass/profile configuration, physical slopes, and stop/failure behavior remain unverified.
 - **Wi-Fi:** not implemented; no trainer IP or LAN-wide scanning performed.
 - **Performance:** software-rendered container checks do not establish 60 fps on the actual Mac/external display.
 - **Route realism:** procedural landscape only. Real route geometry/elevation, GPX, licensed terrain, and Blender assets remain later milestones.
@@ -63,7 +67,11 @@ Periodic checkpoints currently save a complete session snapshot; chunked recordi
 
 ## Verification completed
 
-The 45 unit tests pass, covering FTMS parsing, the no-control-write pairing boundary, connection cleanup, interval boundaries/ramps, pause/resume, stale power, a six-hour simulated ride, IndexedDB round-trip, interrupted-session recovery, atomic backup validation, serialized command acknowledgements, refusal/timeouts, stalled writes, ramp limits, exclusive pilot ownership, visibility loss, and asynchronous stop cleanup. Regressions cover starting at zero cadence, cancellation/retry without disconnection, failed preparation, unsupported saved permissions, and cancelled reconnection. Nine browser workflows pass: the four simulator/storage/layout workflows plus five synthetic-GATT control/reconnection workflows. These cover readiness, 50→75 W ramp, Stop/audit export, zero-cadence waiting/retry, telemetry-only refresh restoration, deliberate disconnect/reconnect, and cancellation during preparation. TypeScript and production builds pass; formatting is checked before commit.
+September 8 checks: 56 unit tests pass. Default and opt-in pilot production builds compile successfully; the only build warning is the existing large Three.js bundle. Formatting and whitespace checks pass. Browser workflow results are described below.
+
+The unit suite covers FTMS parsing, the no-control-write pairing boundary, connection cleanup, interval boundaries/ramps, pause/resume, stale power, a six-hour simulated ride, IndexedDB round-trip, interrupted-session recovery, atomic backup validation, serialized command acknowledgements, refusal/timeouts, stalled writes, ramp limits, exclusive pilot ownership, visibility loss, and asynchronous stop cleanup. Regressions cover starting at zero cadence, cancellation/retry without disconnection, failed preparation, unsupported saved permissions, and cancelled reconnection.
+
+SIM regressions add signed protocol units and explicit command authorization, baseline/profile prerequisites, bounded gradient transitions, coasting, stale/timing/grade faults, distance/elevation integration, downhill physics, route completion, invalid live data, no-FTP riding, and backup validation. Thirteen browser workflows cover the simulator/storage/layout flows, synthetic-GATT control/reconnection, default road selection, no-FTP live road rides with zero control writes, free demo effort/coasting, route history, and narrow-screen layout. These are synthetic software checks, not physical load validation.
 
 The original pilot's initial low-cadence rejection incorrectly disconnected the actual trainer and stranded the Stop button. That lifecycle is corrected; HT-2 documents the evidence and retest. Full-refresh reconnection is browser-dependent: this Mac's Chrome did not restore saved permission during the real check, so the explicit Pair fallback is still required here. No claim of seamless physical reconnection or verified load response is made.
 
@@ -71,4 +79,10 @@ Initial scene compilation now precedes the workout countdown. Idle scenes stop c
 
 ## Next implementation step
 
-Establish the comfortable baseline described in `TRAINER_SETUP.md` before repeating HT-2. Record actual acknowledgements and physical resistance/stop feedback. The rider clarified that normal riding must preserve outdoor-style physical shifting: prioritize a separately validated SIM/terrain mode for that experience, with ERG retained as an explicit power-workout option. Neither mode should assume that the trainer begins unloaded.
+Before wiring real terrain control, establish the comfortable baseline described in `TRAINER_SETUP.md` and repeat HT-2 to record actual acknowledgements and physical resistance/stop feedback. Confirm how the actual trainer receives rider/bike mass for SIM, then add a separately armed, bounded SIM hardware pilot before enabling road control. Neither mode may assume that the trainer begins unloaded. Ordinary route UI/physics development can continue independently.
+
+## SIM protocol and physics boundary
+
+FTMS Set Indoor Bike Simulation Parameters uses opcode `11` followed by signed little-endian wind speed in 0.001 m/s, signed little-endian grade in 0.01%, rolling resistance in 0.0001 units, and wind resistance in 0.01 kg/m units. The command is seven bytes; the similarly named status notification has a different opcode. References: [Bluetooth SIG FTMS test specification](https://files.bluetooth.com/wp-content/uploads/dlm_uploads/2024/10/FTMS.TS_.p6.pdf), [published FTMS implementation table](https://hci.informatik.uni-due.de/fileadmin/fileupload/I-HCI/CHI2024_Learning_from_CyclingHCI_Position_Paper_Buying_vs_Building.pdf).
+
+The software model uses rolling coefficient 0.004, wind coefficient 0.18 kg/m, still air, and 97% drivetrain efficiency. These are explicit simulation assumptions, not measurements of this bicycle. The encoder rejects SIM commands unless a separate gradient grant is supplied; the existing real ERG pilot supplies no such grant. The mock startup sequence requests control, sends flat SIM parameters, and starts, but flat SIM still includes drag and rolling load. This sequence is not yet approved by physical observation, and its confirmation flags are internal test inputs rather than evidence about the actual trainer. Stop acknowledgement likewise does not establish unloading.

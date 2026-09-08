@@ -1,5 +1,6 @@
 import { position, totalSeconds, validateWorkout, type Workout } from '../workouts/model';
 import type { Telemetry } from '../trainer/ftms';
+import { advanceRoad, routeLength, routePosition, validateRoute, type Route } from './terrain';
 export type Source = 'demo' | 'bluetooth';
 export type Phase = 'countdown' | 'running' | 'paused' | 'finished';
 export type Sample = {
@@ -29,8 +30,11 @@ export type Session = {
   workout: Workout;
   startedAt: string;
   source: Source;
-  ftp: number;
+  ftp: number | null;
   mass: number;
+  bikeMass?: number;
+  mode?: 'sim' | 'erg';
+  route?: Route;
   elapsed: number;
   distance: number;
   status: 'in-progress' | 'completed' | 'stopped' | 'interrupted';
@@ -54,23 +58,35 @@ export class RideEngine {
   private last?: number;
   private sampleElapsed = 0;
   private demoPower = 0;
-  constructor(workout: Workout, source: Source, ftp: number, mass: number) {
+  demoEffort = 100;
+  constructor(
+    workout: Workout,
+    source: Source,
+    ftp: number | null,
+    mass: number,
+    options?: { route?: Route; bikeMass?: number },
+  ) {
     validateWorkout(workout);
     if (
-      !Number.isFinite(ftp) ||
-      ftp < 50 ||
-      ftp > 600 ||
+      (ftp === null ? !options?.route : !Number.isFinite(ftp) || ftp < 50 || ftp > 600) ||
       !Number.isFinite(mass) ||
       mass < 35 ||
       mass > 200
     )
       throw new Error('Enter FTP between 50–600 W and rider mass between 35–200 kg.');
+    if (options?.route) validateRoute(options.route);
+    const bikeMass = options?.bikeMass ?? 9;
+    if (!Number.isFinite(bikeMass) || bikeMass < 4 || bikeMass > 30)
+      throw new Error('Bike mass must be 4–30 kg');
     this.session = {
       id: crypto.randomUUID(),
       workout: structuredClone(workout),
       source,
       ftp,
       mass,
+      bikeMass,
+      mode: options?.route ? 'sim' : 'erg',
+      route: options?.route ? structuredClone(options.route) : undefined,
       startedAt: new Date().toISOString(),
       elapsed: 0,
       distance: 0,
@@ -94,7 +110,10 @@ export class RideEngine {
     if (
       this.session.source === 'bluetooth' &&
       (telemetry?.power === undefined ||
+        !Number.isFinite(telemetry.power) ||
         telemetry.powerAt === undefined ||
+        !Number.isFinite(telemetry.powerAt) ||
+        telemetry.powerAt > now ||
         now - telemetry.powerAt > 3000)
     ) {
       this.pause('Live power is stale. Check the trainer connection.');
@@ -109,29 +128,50 @@ export class RideEngine {
     const step = Math.min(dt, remaining);
     this.state.elapsed += step;
     const current = position(this.session.workout, this.state.elapsed);
-    this.state.target = Math.round(current.target * this.session.ftp * this.state.bias);
-    this.state.grade += (current.block.grade - this.state.grade) * (1 - Math.exp(-step / 3));
+    this.state.target = this.session.route
+      ? 0
+      : Math.round(current.target * (this.session.ftp ?? 0) * this.state.bias);
+    if (this.session.route)
+      this.state.grade = routePosition(this.session.route, this.state.distance * 1000).grade;
+    else this.state.grade += (current.block.grade - this.state.grade) * (1 - Math.exp(-step / 3));
     if (this.session.source === 'demo') {
-      this.demoPower += (this.state.target - this.demoPower) * (1 - Math.exp(-step / 2));
+      this.demoPower +=
+        ((this.session.route ? this.demoEffort : this.state.target) - this.demoPower) *
+        (1 - Math.exp(-step / 2));
       this.state.power = Math.max(
         0,
         Math.round(this.demoPower + Math.sin(this.state.elapsed * 0.7) * 3),
       );
-      this.state.cadence = Math.round(current.block.cadence + Math.sin(this.state.elapsed / 3) * 2);
+      if (this.session.route && this.demoEffort === 0) this.state.power = 0;
+      this.state.cadence = this.session.route
+        ? this.demoEffort === 0
+          ? 0
+          : 80
+        : Math.round(current.block.cadence + Math.sin(this.state.elapsed / 3) * 2);
     } else {
       this.state.power = telemetry!.power;
       this.state.cadence =
-        telemetry!.cadenceAt !== undefined && now - telemetry!.cadenceAt < 3000
+        Number.isFinite(telemetry!.cadence) &&
+        telemetry!.cadenceAt !== undefined &&
+        now >= telemetry!.cadenceAt &&
+        now - telemetry!.cadenceAt < 3000
           ? telemetry!.cadence
           : undefined;
     }
-    const v = this.state.speed / 3.6,
-      mass = this.session.mass + 9;
-    const resistance = mass * 9.81 * (0.004 + this.state.grade / 100) + 0.5 * 1.1 * 0.32 * v * v;
-    const force = (Math.max(0, this.state.power ?? 0) * 0.97) / Math.max(v, 2);
-    const nextV = Math.min(25, Math.max(0, v + ((force - resistance) / mass) * step));
-    this.state.speed = nextV * 3.6;
-    this.state.distance += ((v + nextV) * 0.5 * step) / 1000;
+    const motion = advanceRoad(
+      this.state.speed,
+      this.state.power ?? 0,
+      this.state.grade,
+      this.session.mass,
+      this.session.bikeMass ?? 9,
+      step,
+    );
+    this.state.speed = motion.speed;
+    this.state.distance += motion.distance;
+    if (this.session.route) {
+      this.state.distance = Math.min(routeLength(this.session.route) / 1000, this.state.distance);
+      this.state.grade = routePosition(this.session.route, this.state.distance * 1000).grade;
+    }
     this.sampleElapsed += step;
     if (this.sampleElapsed >= 1) {
       this.session.samples.push({
@@ -147,7 +187,10 @@ export class RideEngine {
     }
     this.session.elapsed = this.state.elapsed;
     this.session.distance = this.state.distance;
-    if (this.state.elapsed >= totalSeconds(this.session.workout)) this.finish(true);
+    if (this.session.route && this.state.distance * 1000 >= routeLength(this.session.route))
+      this.finish(true);
+    else if (this.state.elapsed >= totalSeconds(this.session.workout))
+      this.finish(!this.session.route);
   }
   pause(reason = 'Paused. Your place is saved.') {
     if (this.state.phase === 'finished' || this.state.phase === 'paused') return;
@@ -173,6 +216,10 @@ export class RideEngine {
       message: `Intensity ${Math.round(this.state.bias * 100)}%`,
     });
   }
+  setDemoEffort(watts: number) {
+    if (this.session.source !== 'demo' || !this.session.route || !Number.isFinite(watts)) return;
+    this.demoEffort = Math.max(0, Math.min(400, Math.round(watts)));
+  }
   finish(completed = false) {
     if (this.state.phase === 'finished') return;
     this.state.phase = 'finished';
@@ -180,7 +227,11 @@ export class RideEngine {
     this.session.status = completed ? 'completed' : 'stopped';
     this.session.events.push({
       elapsed: this.state.elapsed,
-      message: completed ? 'Workout completed' : 'Ride ended',
+      message: completed
+        ? this.session.route
+          ? 'Route completed'
+          : 'Workout completed'
+        : 'Ride ended',
     });
   }
 }

@@ -6,6 +6,8 @@ import { clock, position, totalSeconds } from '../workouts/model';
 import { RideEngine, type Session } from '../ride/engine';
 import { trainer } from '../trainer/bluetooth';
 import { saveSession } from '../storage/store';
+import { routeLength, routePosition } from '../ride/terrain';
+import TerrainProfile from './TerrainProfile';
 
 export default function Ride({
   engine,
@@ -89,6 +91,8 @@ export default function Ride({
   }, [engine, sceneReady]);
   const current = position(engine.session.workout, state.elapsed),
     next = engine.session.workout.blocks[current.index + 1];
+  const route = engine.session.route;
+  const terrain = route ? routePosition(route, state.distance * 1000) : null;
   const pause = () => {
     engine.pause();
     setState({ ...engine.state });
@@ -147,7 +151,14 @@ export default function Ride({
             <small>W</small>
           </strong>
           <div>
-            Target <b>{state.target || Math.round(current.target * engine.session.ftp)} W</b>
+            {route ? (
+              'Your effort · no watt target'
+            ) : (
+              <>
+                Target{' '}
+                <b>{state.target || Math.round(current.target * (engine.session.ftp ?? 0))} W</b>
+              </>
+            )}
           </div>
         </div>
         <div>
@@ -156,7 +167,9 @@ export default function Ride({
             {state.cadence ?? '—'}
             <small>rpm</small>
           </strong>
-          <div>Aim for {current.block.cadence} rpm</div>
+          <div>
+            {route ? 'Your cadence · shift freely' : `Aim for ${current.block.cadence} rpm`}
+          </div>
         </div>
         <div>
           <span>VIRTUAL SPEED</span>
@@ -169,8 +182,8 @@ export default function Ride({
       </div>
       <div className="ride-route">
         <MountainBadge />
-        <strong>Oaxaca foothills</strong>
-        <span>Procedural workout road</span>
+        <strong>{route?.name ?? 'Oaxaca foothills'}</strong>
+        <span>{route ? 'SIM terrain preview · resistance unchanged' : 'ERG workout preview'}</span>
         <div>
           <b>{state.grade.toFixed(1)}%</b> visual grade
         </div>
@@ -182,55 +195,117 @@ export default function Ride({
       )}
       <div className="ride-bottom">
         <div className="interval-line">
-          <div>
-            <span className="eyebrow">
-              INTERVAL {current.index + 1} / {engine.session.workout.blocks.length}
-            </span>
-            <h2>{current.block.name}</h2>
-            <p>{current.block.cue}</p>
-          </div>
-          <div className="interval-clock">
-            <strong>{clock(current.remaining)}</strong>
-            <span>interval remaining</span>
-          </div>
-          <div className="next-block">
-            <span>UP NEXT</span>
-            <strong>{next?.name ?? 'Ride complete'}</strong>
-            <small>
-              {next
-                ? `${clock(next.seconds)} · ${Math.round(next.to * engine.session.ftp * state.bias)} W`
-                : 'Time to cool off.'}
-            </small>
-          </div>
+          {route && terrain ? (
+            <>
+              <div>
+                <span className="eyebrow">SIM · FREE RIDE</span>
+                <h2>{route.name}</h2>
+                <p>Choose your effort. Terrain follows your distance.</p>
+              </div>
+              <div className="interval-clock">
+                <strong>{(terrain.remaining / 1000).toFixed(2)} km</strong>
+                <span>road remaining</span>
+              </div>
+              <div className="next-block">
+                <span>CLIMBING</span>
+                <strong>{Math.round(terrain.ascent)} m</strong>
+                <small>{Math.round(terrain.progress * 100)}% of the road</small>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <span className="eyebrow">
+                  INTERVAL {current.index + 1} / {engine.session.workout.blocks.length}
+                </span>
+                <h2>{current.block.name}</h2>
+                <p>{current.block.cue}</p>
+              </div>
+              <div className="interval-clock">
+                <strong>{clock(current.remaining)}</strong>
+                <span>interval remaining</span>
+              </div>
+              <div className="next-block">
+                <span>UP NEXT</span>
+                <strong>{next?.name ?? 'Ride complete'}</strong>
+                <small>
+                  {next
+                    ? `${clock(next.seconds)} · ${Math.round(next.to * (engine.session.ftp ?? 0) * state.bias)} W`
+                    : 'Time to cool off.'}
+                </small>
+              </div>
+            </>
+          )}
         </div>
-        <Profile workout={engine.session.workout} elapsed={state.elapsed} />
+        {route ? (
+          <TerrainProfile route={route} meters={state.distance * 1000} />
+        ) : (
+          <Profile workout={engine.session.workout} elapsed={state.elapsed} />
+        )}
         <div className="ride-controls">
           <span className="ride-time">
-            {clock(state.elapsed)} <span>/ {clock(totalSeconds(engine.session.workout))}</span>
+            {clock(state.elapsed)}{' '}
+            <span>
+              {route
+                ? `/ ${(routeLength(route) / 1000).toFixed(1)} km road`
+                : `/ ${clock(totalSeconds(engine.session.workout))}`}
+            </span>
           </span>
-          <div className="intensity-control">
-            <button
-              aria-label="Decrease intensity"
-              onClick={() => {
-                engine.setBias(state.bias - 0.05);
-                setState({ ...engine.state });
-              }}
-              disabled={state.bias <= 0.8}
-            >
-              <Minus size={15} />
-            </button>
-            <span>{Math.round(state.bias * 100)}% intensity</span>
-            <button
-              aria-label="Increase intensity"
-              onClick={() => {
-                engine.setBias(state.bias + 0.05);
-                setState({ ...engine.state });
-              }}
-              disabled={state.bias >= 1.1}
-            >
-              <Plus size={15} />
-            </button>
-          </div>
+          {route ? (
+            engine.session.source === 'demo' ? (
+              <label className="demo-effort">
+                Demo effort
+                <input
+                  aria-label="Demo effort watts"
+                  type="range"
+                  min={0}
+                  max={400}
+                  step={10}
+                  value={engine.demoEffort}
+                  onChange={(e) => {
+                    engine.setDemoEffort(Number(e.target.value));
+                    setState({ ...engine.state });
+                  }}
+                />
+                <span>{engine.demoEffort} W</span>
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    engine.setDemoEffort(0);
+                    setState({ ...engine.state });
+                  }}
+                >
+                  Coast
+                </button>
+              </label>
+            ) : (
+              <span>Your physical gears · your pace</span>
+            )
+          ) : (
+            <div className="intensity-control">
+              <button
+                aria-label="Decrease intensity"
+                onClick={() => {
+                  engine.setBias(state.bias - 0.05);
+                  setState({ ...engine.state });
+                }}
+                disabled={state.bias <= 0.8}
+              >
+                <Minus size={15} />
+              </button>
+              <span>{Math.round(state.bias * 100)}% intensity</span>
+              <button
+                aria-label="Increase intensity"
+                onClick={() => {
+                  engine.setBias(state.bias + 0.05);
+                  setState({ ...engine.state });
+                }}
+                disabled={state.bias >= 1.1}
+              >
+                <Plus size={15} />
+              </button>
+            </div>
+          )}
           <span className="saved-indicator">
             {savedAt && !storageError ? 'Saved on this computer' : 'Saving…'}
           </span>

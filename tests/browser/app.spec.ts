@@ -3,6 +3,7 @@ test('library, custom workout, persistence and validation', async ({ page }) => 
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
+  await page.getByRole('button', { name: 'Workouts', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Find your next ride.' })).toBeVisible();
   await page.screenshot({ path: 'test-results/library-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Hills', exact: true }).click();
@@ -14,6 +15,7 @@ test('library, custom workout, persistence and validation', async ({ page }) => 
   await page.getByRole('button', { name: 'Save custom workout' }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
   await page.reload();
+  await page.getByRole('button', { name: 'Workouts', exact: true }).click();
   await page.getByRole('button', { name: 'My workouts', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'My test foothills' })).toBeVisible();
   await page.getByLabel('Ride source').selectOption('bluetooth');
@@ -71,6 +73,7 @@ test('settings, backup download and no automatic Bluetooth pairing', async ({ pa
 test('narrow screen retains workout controls', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Workouts', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start demo ride' })).toBeAttached();
   await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/library-mobile.png', fullPage: true });
