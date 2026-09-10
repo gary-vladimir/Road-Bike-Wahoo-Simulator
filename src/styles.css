@@ -573,6 +573,40 @@ footer > span:last-child {
   display: grid;
   gap: 16px;
 }
+.diagnostic-metrics.pilot-response {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.pilot-actions [aria-pressed='true'] {
+  border-color: var(--lime);
+}
+.pilot-table-wrap {
+  overflow-x: auto;
+  margin: 20px 0;
+}
+.pilot-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.pilot-table caption {
+  text-align: left;
+  color: #a9b4a5;
+  margin-bottom: 12px;
+}
+.pilot-table th,
+.pilot-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .diagnostic-metrics.pilot-response {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .route-grid .workout-card p {
   color: #a9b4a5;
   font-size: 14px;

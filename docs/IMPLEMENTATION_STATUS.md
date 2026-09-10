@@ -1,6 +1,6 @@
 # Implementation status and decisions
 
-Updated September 8, 2026. Implements the initial usable slice and the rider's SIM-first direction after review of both implementation plans.
+Updated September 9, 2026. Implements the initial usable slice and the rider's SIM-first direction after review of both implementation plans.
 
 ## Useful additions adopted from IMPLEMENTATION_PLAN.md
 
@@ -52,10 +52,12 @@ The Direct Connect description is community documentation, not an official guara
 - Free road rides use adjustable demo effort/coasting or fresh live power with no FTP or prescribed cadence. Virtual physics includes rider/bike mass, grade, rolling resistance, and aerodynamic drag. No gear-position sensor is assumed and measured power is not scaled by gearing.
 - SIM sessions persist their route, mode, mass assumptions, and optional FTP in summaries/history/backups; existing records remain compatible. Settings exposes bike mass with a disclosed 9 kg default.
 - A synthetic-transport SIM controller and FTMS encoder support bounded terrain commands, acknowledged startup/stop, explicit baseline/profile prerequisites, 0.25 percentage-point gradient steps at most once per second, freshness/timing faults, and coasting without the ERG cadence threshold. This controller has no real Bluetooth adapter or ride hookup.
+- ERG response diagnostics separate selected/acknowledged watts from fresh trainer power/cadence, record stable-target averages with settling excluded, preserve raw status notifications, and capture post-stop readings. Evidence checkpoints save separately from ride backups and restore only for export.
 
 ## Still gated or deferred
 
 - **Actual KICKR validation:** read-only pairing and pedaling confirmed on this Mac. Reconnect/fault and physical load responses still require hardware observations.
+- **September 9 control evidence:** the actual KICKR acknowledged 50→75→100 W ramps and Stop. The rider felt light load at every target and a heavier load after termination. The captured test ended on the cadence guard about 6.5 seconds after acknowledging 100 W. The earlier log lacked measured watts/cadence, so physical tracking remains unresolved; the new recorder enables the next comparison. See HT-2 and its captured fixture.
 - **Automatic ERG/SIM:** actual ride control remains disabled. The separate ERG diagnostic supports supervised HT-2; SIM protocol/control logic is mock-tested only. Baseline handoff, trainer mass/profile configuration, physical slopes, and stop/failure behavior remain unverified.
 - **Wi-Fi:** not implemented; no trainer IP or LAN-wide scanning performed.
 - **Performance:** software-rendered container checks do not establish 60 fps on the actual Mac/external display.
@@ -66,6 +68,8 @@ The Direct Connect description is community documentation, not an official guara
 Periodic checkpoints currently save a complete session snapshot; chunked recording is a future optimization if long-ride storage measurements justify it. On storage failures, the ride displays an error and provides a downloadable summary. An abrupt closure can lose the samples since the last successful checkpoint.
 
 ## Verification completed
+
+September 9 diagnostic checks: 63 unit tests and seven synthetic-GATT browser workflows pass. The new regression uses a trainer that accepts 100 W but continues reporting 50 W, and verifies that the UI exposes this mismatch rather than treating the acknowledgement as measured performance. Saved evidence survives reload while controls remain disarmed. The actual September 9 command log is retained as a fixture; it supplies protocol evidence only. Default and pilot builds compile, and formatting/whitespace checks pass.
 
 September 8 checks: 56 unit tests pass. Default and opt-in pilot production builds compile successfully; the only build warning is the existing large Three.js bundle. Formatting and whitespace checks pass. Browser workflow results are described below.
 

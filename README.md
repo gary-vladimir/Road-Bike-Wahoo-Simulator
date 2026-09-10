@@ -54,6 +54,10 @@ A full page refresh ends the browser's GATT session. BikeSIM attempts to restore
 
 Hot replacement is disabled in pilot mode so edits cannot replace an active controller. Reload only after stopping the test. The Compose default remains `off`; automatic workout resistance is still unavailable. Export the separate control test log from the test panel.
 
+The **Check ERG target response** panel shows selected, acknowledged, and measured watts separately, alongside cadence and time at target. Hold a target for twenty seconds after acknowledgement if comfortable; the table excludes the first ten seconds and repeated/stale packets from its averages. The current rider observation is that test termination brings back a heavier load: **Stop ends the test but is not an unload command**. See the September 9 HT-2 record before another test.
+
+Evidence includes up to 1,200 half-second observations, raw machine-status bytes, and the command audit. It saves locally every five seconds, at test end, and for twenty seconds afterward. **Export last saved test** retrieves the latest checkpoint after reload without restoring control. An abrupt closure can lose the latest samples. This diagnostic record has a separate export and is not part of the ride backup. Trainer-reported power may be smoothed and does not independently verify physical load.
+
 ## Checks
 
 ```sh

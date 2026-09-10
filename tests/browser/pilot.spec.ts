@@ -155,6 +155,67 @@ test('supervised pilot requires readiness and stops acknowledged mock hardware',
   await expect(start).toBeEnabled();
 });
 
+test('shows measured power independently of accepted targets and preserves evidence across reload', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await page.getByRole('button', { name: 'Pair KICKR via Bluetooth' }).click();
+  await expect(page.getByText('Live power received', { exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: 'I’m on the bike and ready' }).check();
+  await page.getByRole('button', { name: 'Start 50 W test', exact: true }).click();
+  await expect(
+    page.getByText('running · last acknowledged target 50 W', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '100 W', exact: true }).click();
+  await expect(page.getByRole('button', { name: '100 W', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(
+    page.getByText('running · last acknowledged target 100 W', { exact: true }),
+  ).toBeVisible({ timeout: 9000 });
+  const measurements = page.getByLabel('ERG response measurements');
+  await expect(measurements).toContainText('50measured W');
+  await expect(page.getByRole('cell', { name: '50.0 W', exact: true })).toBeVisible({
+    timeout: 14000,
+  });
+  await expect(page.getByRole('cell', { name: '80.0 rpm', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Stop trainer test', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Export last saved test', exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () =>
+      page.evaluate(async () => {
+        const db = await new Promise<IDBDatabase>((resolve) => {
+          const request = indexedDB.open('bikesim');
+          request.onsuccess = () => resolve(request.result);
+        });
+        return new Promise<string>((resolve) => {
+          const read = db.transaction('settings').objectStore('settings').get('last-pilot-report');
+          read.onsuccess = () => {
+            db.close();
+            resolve(read.result?.state);
+          };
+        });
+      }),
+    )
+    .toBe('stopped');
+  await page.screenshot({ path: 'test-results/pilot-evidence-desktop.png', fullPage: true });
+  await page.reload();
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Export last saved test', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start 50 W test', exact: true })).toBeDisabled();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites,
+    ),
+  ).toEqual([]);
+});
+
 test('zero-cadence Start waits, Stop cancels, and retry works without reconnecting', async ({
   page,
 }) => {

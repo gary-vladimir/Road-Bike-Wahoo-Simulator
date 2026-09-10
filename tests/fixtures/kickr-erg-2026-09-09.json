@@ -1,0 +1,117 @@
+{
+  "state": "faulted",
+  "applied": 100,
+  "message": "Cadence below pilot minimum: 50 rpm Stop acknowledged; physical load is not verified.",
+  "audit": [
+    {
+      "at": 102081127.60000002,
+      "event": "write",
+      "bytes": [0]
+    },
+    {
+      "at": 102081292,
+      "event": "acknowledgement",
+      "bytes": [0],
+      "result": 1
+    },
+    {
+      "at": 102081292,
+      "event": "write",
+      "bytes": [5, 50, 0]
+    },
+    {
+      "at": 102081471.80000001,
+      "event": "acknowledgement",
+      "bytes": [5, 50, 0],
+      "result": 1
+    },
+    {
+      "at": 102081471.90000004,
+      "event": "write",
+      "bytes": [7]
+    },
+    {
+      "at": 102081740.90000004,
+      "event": "acknowledgement",
+      "bytes": [7],
+      "result": 1
+    },
+    {
+      "at": 102096378.30000001,
+      "event": "write",
+      "bytes": [5, 60, 0]
+    },
+    {
+      "at": 102096504,
+      "event": "acknowledgement",
+      "bytes": [5, 60, 0],
+      "result": 1
+    },
+    {
+      "at": 102097628.30000001,
+      "event": "write",
+      "bytes": [5, 70, 0]
+    },
+    {
+      "at": 102097763.19999999,
+      "event": "acknowledgement",
+      "bytes": [5, 70, 0],
+      "result": 1
+    },
+    {
+      "at": 102098878.80000001,
+      "event": "write",
+      "bytes": [5, 75, 0]
+    },
+    {
+      "at": 102099022.10000002,
+      "event": "acknowledgement",
+      "bytes": [5, 75, 0],
+      "result": 1
+    },
+    {
+      "at": 102107878.60000002,
+      "event": "write",
+      "bytes": [5, 85, 0]
+    },
+    {
+      "at": 102108023.60000002,
+      "event": "acknowledgement",
+      "bytes": [5, 85, 0],
+      "result": 1
+    },
+    {
+      "at": 102109128.60000002,
+      "event": "write",
+      "bytes": [5, 95, 0]
+    },
+    {
+      "at": 102109282.5,
+      "event": "acknowledgement",
+      "bytes": [5, 95, 0],
+      "result": 1
+    },
+    {
+      "at": 102110379,
+      "event": "write",
+      "bytes": [5, 100, 0]
+    },
+    {
+      "at": 102110635.40000004,
+      "event": "acknowledgement",
+      "bytes": [5, 100, 0],
+      "result": 1
+    },
+    {
+      "at": 102117128.80000001,
+      "event": "write",
+      "bytes": [8, 1]
+    },
+    {
+      "at": 102117293.19999999,
+      "event": "acknowledgement",
+      "bytes": [8, 1],
+      "result": 1
+    }
+  ]
+}

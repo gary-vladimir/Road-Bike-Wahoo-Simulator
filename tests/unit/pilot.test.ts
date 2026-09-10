@@ -75,6 +75,7 @@ function fixture() {
     document,
     ack,
     point,
+    status,
     prepare: () => ErgPilot.prepare(source, (s) => snapshots.push(s)),
     delayStop: () => {
       delayStop = true;
@@ -104,6 +105,18 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe('supervised pilot lifecycle with synthetic GATT only', () => {
+  it('exposes selected targets immediately and captures raw machine status without extra control writes', async () => {
+    const f = fixture(),
+      pilot = await f.prepare();
+    await pilot.start();
+    pilot.setTarget(100);
+    expect(f.snapshots.at(-1)).toMatchObject({ requested: 100, applied: 50 });
+    Object.assign(f.status, { value: new DataView(Uint8Array.of(0x08, 50, 0).buffer) });
+    f.status.dispatchEvent(new Event('characteristicvaluechanged'));
+    expect(f.snapshots.at(-1)?.machineStatus.at(-1)?.bytes).toEqual([0x08, 50, 0]);
+    expect(f.writes).toEqual([[0], [5, 50, 0], [7]]);
+    await pilot.stop();
+  });
   it('waits at zero cadence, cancels without writes, and can start a fresh test on the same connection', async () => {
     const f = fixture();
     f.stall();

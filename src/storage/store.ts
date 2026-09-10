@@ -2,6 +2,7 @@ import { openDB } from 'idb';
 import type { Session } from '../ride/engine';
 import { validateWorkout, type Workout } from '../workouts/model';
 import { validateRoute } from '../ride/terrain';
+import type { PilotReport } from '../trainer/pilot-evidence';
 export type Settings = {
   ftp: number | null;
   mass: number;
@@ -22,6 +23,13 @@ export async function loadSettings(): Promise<Settings> {
 }
 export async function saveSettings(settings: Settings) {
   await (await db()).put('settings', settings, 'rider');
+}
+/** Separate from rider settings/backups; restored for export only, never control resumption. */
+export async function savePilotReport(report: PilotReport) {
+  await (await db()).put('settings', report, 'last-pilot-report');
+}
+export async function loadPilotReport(): Promise<PilotReport | undefined> {
+  return (await db()).get('settings', 'last-pilot-report');
 }
 export async function loadWorkouts(): Promise<Workout[]> {
   return (await db()).getAll('workouts');

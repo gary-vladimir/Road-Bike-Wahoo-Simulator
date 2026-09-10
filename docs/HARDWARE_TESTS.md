@@ -19,7 +19,7 @@ Observations to record: macOS/Chrome versions, device firmware if available thro
 
 ## HT-2 — Supervised low-load ERG control
 
-Status: **mock-tested pilot implemented; physical test pending a known comfortable baseline**. Default builds keep it disabled. Before repeating this test, follow [physical setup and baseline guidance](TRAINER_SETUP.md). The rider reports about 150 W at 50 rpm in the large chainring; the cadence threshold is not evidence of an easy starting load.
+Status: **actual target/start/stop acknowledgements captured; physical watt tracking remains unresolved**. Default builds keep it disabled. Before repeating this test, follow [physical setup and baseline guidance](TRAINER_SETUP.md). The rider reports about 150 W at 50 rpm in the large chainring; the cadence threshold is not evidence of an easy starting load. On September 9 the rider felt a strong load reduction during the test and heavier load returning afterward. Stop must not be presented as unloading.
 
 Implemented prerequisites: HT-1 recorded, actual supported ranges known, request/power/start/stop payloads checked, an exclusive browser lock, serialized writes with matching indications, 2.5-second acknowledgement timeout without retries, fresh power/cadence guards, minimum 50 rpm cadence, 100 W pilot ceiling, 10 W/second ramp limit, stop priority, and synthetic fault tests. This tab lock cannot exclude Wahoo or other native controllers. The rider must be present and ready before any load changes.
 
@@ -40,6 +40,26 @@ The rider reported immediate disconnect on Start, ineffective Stop afterward, an
 Start now waits for pedaling; cancellation and acknowledged stops retain telemetry; Stop is available during preparation/waiting and shows its result; fresh attempts no longer require a page reload. The upper Disconnect button stops an active test first. Synthetic unit and browser regressions cover these cases.
 
 Read-only pairing was repeated successfully with the actual KICKR after the fix. Refresh was then tested without any resistance commands: Chrome did not restore the saved permission, and the new explicit Pair fallback appeared. Automatic refresh restoration passes with synthetic saved permissions but remains unavailable in this Mac's observed browser configuration. Physical load and Stop response still need a fresh rider check.
+
+### September 9 actual command capture and response investigation
+
+The rider could select 50, 75, and 100 W, but all felt very light. Starting the test reduced the pre-existing load; ending it restored a heavier feel. The existing Chrome tab was inspected without starting another test. Its final state was `faulted`, with the last target at 100 W and the reason `Cadence below pilot minimum: 50 rpm Stop acknowledged; physical load is not verified.`
+
+The [captured control log](../tests/fixtures/kickr-erg-2026-09-09.json) contains successful FTMS responses to Request Control, 50 W, Start, the ramp through 60/70/75/85/95/100 W, and Stop `08 01`. Approximately 6.49 seconds elapsed from the 100 W acknowledgement to the Stop write. The record does not show whether the rider deliberately slowed or cadence dropped while trying to continue. It contains no simultaneous watts/cadence samples, so it cannot establish tracking, identify which mode existed beforehand, or distinguish a device response problem from gearing/cadence/settling effects. No new control commands were sent while inspecting it.
+
+Wahoo describes ERG response delays, very light resistance at high cadence, and gear-dependent power limits in its [ERG guide](https://support.wahoofitness.com/hc/en-us/articles/4402565516946-A-Guide-to-using-ERG-mode). These are hypotheses to check against measurements, not a diagnosis. A competing Wahoo/other controller is another possibility; BikeSIM's browser lock cannot exclude it. Do not raise the pilot ceiling or change command ordering just to provoke a stronger sensation without evidence.
+
+The updated **Check ERG target response** panel distinguishes selected, acknowledged, and trainer-measured watts, displays cadence and time at target, and records readings before/during/after the test. The table excludes the first ten seconds of each stable target observation and counts repeated sensor timestamps only once. Intermediate ramps and readings after Stop do not enter target averages. These are descriptive measurements, not automatic pass/fail or independent calibration. Raw machine-status notifications are also exported for interpretation alongside the command log.
+
+Next manual check, only while comfortable:
+
+1. Follow the comfortable-baseline setup first. Use the small front chainring and a middle rear cog; keep this gear fixed for the ERG comparison. End other trainer-control sessions.
+2. With the test stopped, reload BikeSIM and pair again if needed. Open Trainer. Confirm comfortable read-only pedaling for about ten seconds before starting, to capture the baseline.
+3. Select readiness and Start. Maintain a comfortable, steady cadence above 50 rpm; there is no need to spin fast to chase watts. Hold 50 W for twenty seconds after its acknowledgement. If comfortable, repeat at 75 W and 100 W, waiting until the selected target is acknowledged before timing each hold. Stop if uncomfortable rather than forcing the cadence threshold.
+4. End the test. The prior heavier feel may return. Keep the panel open for fifteen seconds to capture the transition, but do not keep pedaling if uncomfortable. Record how it felt and whether the stop was manual or automatic.
+5. Export the control test log. Selected targets and physical sensations alone are insufficient; review the settled measured-power/cadence table and raw samples. The last evidence checkpoint is also available through **Export last saved test** after reload, without restoring control.
+
+If settled power does not track these targets, compare the same low targets in Wahoo's **Target Power/ERG** mode with BikeSIM control ended and the same gear/cadence. That comparison is a subsequent diagnostic, not a simultaneous second controller. Wahoo recommends checking operation in its own app in its [low-resistance troubleshooting](https://support.wahoofitness.com/hc/en-us/articles/4402745347858-Trainer-resistance-is-too-low). A matching symptom in Wahoo points beyond BikeSIM's command path; different behavior narrows the investigation to control integration. Neither result alone proves a hardware defect.
 
 ## HT-3 — Supervised SIM handoff and terrain
 

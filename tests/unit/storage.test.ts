@@ -10,15 +10,33 @@ import {
   saveSession,
   saveSettings,
   saveWorkout,
+  savePilotReport,
+  loadPilotReport,
 } from '../../src/storage/store';
 import { RideEngine } from '../../src/ride/engine';
 import { presets } from '../../src/workouts/model';
 import { routes } from '../../src/ride/terrain';
 import { routeWorkout } from '../../src/ui/RoadSetup';
+import { PilotEvidence } from '../../src/trainer/pilot-evidence';
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
 });
 describe('local persistence and backup boundaries', () => {
+  it('saves diagnostic evidence separately without changing rider settings or restoring control', async () => {
+    const report = new PilotEvidence().report({
+      state: 'running',
+      applied: 75,
+      requested: 100,
+      message: '',
+      audit: [],
+      machineStatus: [],
+    });
+    await saveSettings({ ftp: 210, mass: 70, quality: 'low' });
+    await savePilotReport(report);
+    expect(await loadPilotReport()).toEqual(report);
+    expect((await loadSettings()).ftp).toBe(210);
+    expect((await backup()).settings).not.toHaveProperty('audit');
+  });
   it('round-trips SIM routes with unknown FTP and rejects corrupted terrain atomically', async () => {
     const e = new RideEngine(routeWorkout(routes[0]), 'demo', null, 75, {
       route: routes[0],

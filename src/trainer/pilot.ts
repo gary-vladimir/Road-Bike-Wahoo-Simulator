@@ -4,8 +4,10 @@ import type { Telemetry } from './ftms';
 export type PilotSnapshot = {
   state: PilotState;
   applied: number;
+  requested: number;
   message: string;
   audit: AuditEntry[];
+  machineStatus: { at: number; bytes: number[] }[];
 };
 type PilotDevice = {
   device: BluetoothDevice;
@@ -43,12 +45,15 @@ export class ErgPilot {
   private status: BluetoothRemoteGATTCharacteristic;
   private point: BluetoothRemoteGATTCharacteristic;
   private queue: ControlQueue;
+  private statuses: { at: number; bytes: number[] }[] = [];
   private snapshot(): PilotSnapshot {
     return {
       state: this.supervisor.state,
       applied: this.supervisor.applied,
+      requested: this.target,
       message: this.supervisor.message,
       audit: [...this.queue.audit],
+      machineStatus: [...this.statuses],
     };
   }
   private emit() {
@@ -72,6 +77,14 @@ export class ErgPilot {
   };
   private machineStatus = (e: Event) => {
     const data = (e.target as BluetoothRemoteGATTCharacteristic).value;
+    if (data) {
+      this.statuses.push({
+        at: performance.now(),
+        bytes: Array.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)),
+      });
+      if (this.statuses.length > 200) this.statuses.shift();
+      this.emit();
+    }
     if (
       data &&
       data.byteLength &&
@@ -210,7 +223,9 @@ export class ErgPilot {
   setTarget(watts: number) {
     if (!Number.isInteger(watts) || watts < 50 || watts > 100)
       throw new Error('The supervised test is limited to 50–100 W.');
+    if (this.disposed || this.shutdown || this.supervisor.state !== 'running') return;
     this.target = watts;
+    this.emit();
   }
   async trip(reason: string) {
     if (this.disposed || this.shutdown) return;
