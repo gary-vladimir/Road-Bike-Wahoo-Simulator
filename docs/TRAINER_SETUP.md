@@ -1,5 +1,7 @@
 # Physical setup, startup load, and riding modes
 
+**September 10 update:** see the [flywheel review](FLYWHEEL_REVIEW.md) for the current next step. The repeated low-power ERG test is not the reference for realistic road feel; establish a comfortable Wahoo SIM comparison first. Earlier baseline instructions below remain context for ERG testing.
+
 September 8, 2026. Supersedes the assumption that reaching 50 rpm is necessarily an easy initial hardware check. No hardware commands were sent for this review.
 
 ## Confirmed observations and unknowns

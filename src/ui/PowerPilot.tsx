@@ -131,7 +131,9 @@ export default function PowerPilot({ registerStop, onActiveChange }: Props) {
       <p>
         Click Start, then pedal up to 50 rpm. The test waits without changing resistance until fresh
         power and cadence arrive. It starts at 50 W, with gradual changes up to 100 W. Space or
-        Escape stops the test. These are absolute power targets, not added resistance.
+        Escape stops the test. ERG adjusts braking to hold the requested total watts. It can reduce
+        your previous load. At the same steady cadence, 100 W should require more pedal effort than
+        50 W; a soft feel alone does not establish whether a target is being followed.
       </p>
       <p>
         Stop cancels a waiting test or sends the trainer stop command. Telemetry stays connected

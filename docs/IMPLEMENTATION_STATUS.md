@@ -83,7 +83,7 @@ Initial scene compilation now precedes the workout countdown. Idle scenes stop c
 
 ## Next implementation step
 
-Before wiring real terrain control, establish the comfortable baseline described in `TRAINER_SETUP.md` and repeat HT-2 to record actual acknowledgements and physical resistance/stop feedback. Confirm how the actual trainer receives rider/bike mass for SIM, then add a separately armed, bounded SIM hardware pilot before enabling road control. Neither mode may assume that the trainer begins unloaded. Ordinary route UI/physics development can continue independently.
+The September 10 [flywheel review](FLYWHEEL_REVIEW.md) replaces repeated low-power ERG attempts with a Wahoo SIM comparison. Latest actual telemetry repeatedly follows 50 W before power dips and a single reported zero cadence triggers Stop. This is partial target-response evidence, not proof of exact flywheel modeling or all-target validation. Confirm actual trainer profile configuration and SIM coasting/re-engagement feel, then add a separately armed, bounded SIM hardware pilot before enabling road control. Neither mode may assume that the trainer begins unloaded. Ordinary route UI/physics development can continue independently.
 
 ## SIM protocol and physics boundary
 

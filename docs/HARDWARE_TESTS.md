@@ -1,5 +1,7 @@
 # Hardware validation log
 
+**Latest next step (September 10):** use the [flywheel review and Wahoo SIM comparison](FLYWHEEL_REVIEW.md). This supersedes repeating the low-power ERG protocol below as the next rider task. The latest log shows responding 50 W telemetry and a single reported cadence zero triggering Stop; physical flywheel engagement is not independently measured.
+
 ## HT-1 — Read-only Bluetooth telemetry
 
 Status: **connection and pedaling confirmed; reconnect/fault scenarios still pending**.
