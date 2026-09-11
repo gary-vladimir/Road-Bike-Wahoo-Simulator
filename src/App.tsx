@@ -121,6 +121,7 @@ export default function App() {
       setEngine(
         new RideEngine(selected, source, settings.ftp ?? 200, settings.mass, {
           bikeMass: settings.bikeMass ?? 9,
+          wheel: settings.wheel,
         }),
       );
     } catch (e) {
@@ -141,6 +142,7 @@ export default function App() {
         new RideEngine(routeWorkout(route), source, settings.ftp, settings.mass, {
           route,
           bikeMass: settings.bikeMass ?? 9,
+          wheel: settings.wheel,
         }),
       );
     } catch (error) {
@@ -213,7 +215,7 @@ export default function App() {
       ) : page === 'Ride' ? (
         <RoadSetup settings={settings} loaded={loaded} onStart={startRoad} />
       ) : page === 'Trainer' ? (
-        <Diagnostics />
+        <Diagnostics settings={settings} />
       ) : page === 'Settings' ? (
         <Settings
           settings={settings}

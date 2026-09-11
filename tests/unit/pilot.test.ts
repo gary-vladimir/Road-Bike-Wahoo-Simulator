@@ -26,6 +26,8 @@ function fixture() {
   const writes: number[][] = [];
   let delayStop = false,
     delayPower = false,
+    delaySim = false,
+    power = 50,
     cadence = 80,
     stale = false;
   const point = Object.assign(new EventTarget(), {
@@ -35,7 +37,12 @@ function fixture() {
     writeValueWithResponse: async (bytes: ArrayBuffer) => {
       const payload = Array.from(new Uint8Array(bytes));
       writes.push(payload);
-      if ((payload[0] !== 8 || !delayStop) && (payload[0] !== 5 || !delayPower)) ack(payload[0]);
+      if (
+        (payload[0] !== 8 || !delayStop) &&
+        (payload[0] !== 5 || !delayPower) &&
+        (payload[0] !== 0x11 || !delaySim)
+      )
+        ack(payload[0]);
     },
   });
   function ack(opcode: number) {
@@ -59,7 +66,7 @@ function fixture() {
     device,
     range: { min: 0, max: 2000, increment: 1 },
     telemetry: () => ({
-      power: 50,
+      power,
       cadence,
       receivedAt: performance.now(),
       powerAt: stale ? performance.now() - 3000 : performance.now(),
@@ -76,7 +83,15 @@ function fixture() {
     ack,
     point,
     status,
-    prepare: () => ErgPilot.prepare(source, (s) => snapshots.push(s)),
+    prepare: (mode: 'erg' | 'sim' = 'erg') =>
+      ErgPilot.prepare(source, (s) => snapshots.push(s), mode),
+    coast: () => {
+      power = 0;
+      cadence = 0;
+    },
+    delaySim: () => {
+      delaySim = true;
+    },
     delayStop: () => {
       delayStop = true;
     },
@@ -105,6 +120,65 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe('supervised pilot lifecycle with synthetic GATT only', () => {
+  it('starts SIM at zero watts/cadence, ramps signed slopes, and preserves telemetry after Stop', async () => {
+    const f = fixture();
+    f.coast();
+    const pilot = await f.prepare('sim');
+    await pilot.start({ baselineConfirmed: true, trainerProfileConfirmed: true });
+    expect(f.writes).toEqual([[0], [0x11, 0, 0, 0, 0, 40, 18], [7]]);
+    expect(f.snapshots.at(-1)).toMatchObject({ state: 'running', mode: 'sim', grade: 0 });
+    expect(() => pilot.setTarget(100)).toThrow('unavailable');
+    expect(() => pilot.setGrade(1.1)).toThrow('limited');
+    pilot.setGrade(1);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(f.snapshots.at(-1)?.grade).toBe(1);
+    pilot.setGrade(-1);
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(f.snapshots.at(-1)?.grade).toBe(-1);
+    expect(f.writes.at(-1)).toEqual([0x11, 0, 0, 156, 255, 40, 18]);
+    expect(f.writes.every((w) => w[0] !== 5)).toBe(true);
+    await pilot.stop();
+    expect(f.writes.at(-1)).toEqual([8, 1]);
+    expect(f.disconnect).not.toHaveBeenCalled();
+  });
+  it('requires explicit SIM readiness and excludes another ERG controller', async () => {
+    const f = fixture();
+    const pilot = await f.prepare('sim');
+    await expect(f.prepare()).rejects.toThrow('Another BikeSIM');
+    await expect(pilot.start()).rejects.toThrow('Confirm');
+    expect(f.writes).toEqual([]);
+    expect(f.disconnect).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(0);
+    const again = await f.prepare('sim');
+    await again.stop();
+  });
+  it('waits for a SIM fault stop acknowledgement before cleanup', async () => {
+    const f = fixture();
+    f.coast();
+    const pilot = await f.prepare('sim');
+    await pilot.start({ baselineConfirmed: true, trainerProfileConfirmed: true });
+    f.delayStop();
+    f.expire();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(f.writes.at(-1)).toEqual([8, 1]);
+    expect(f.disconnect).not.toHaveBeenCalled();
+    f.ack(8);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.disconnect).not.toHaveBeenCalled();
+    expect(f.snapshots.at(-1)?.state).toBe('faulted');
+  });
+  it('cancels an in-flight SIM startup without a late Start command', async () => {
+    const f = fixture();
+    f.delaySim();
+    const pilot = await f.prepare('sim');
+    const starting = pilot.start({ baselineConfirmed: true, trainerProfileConfirmed: true });
+    await vi.advanceTimersByTimeAsync(0);
+    const stopping = pilot.stop();
+    f.ack(0x11);
+    await Promise.all([starting, stopping]);
+    expect(f.writes).toEqual([[0], [0x11, 0, 0, 0, 0, 40, 18], [8, 1]]);
+    expect(f.disconnect).not.toHaveBeenCalled();
+  });
   it('exposes selected targets immediately and captures raw machine status without extra control writes', async () => {
     const f = fixture(),
       pilot = await f.prepare();

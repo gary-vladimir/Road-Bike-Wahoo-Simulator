@@ -3,13 +3,21 @@ import type { Session } from '../ride/engine';
 import { validateWorkout, type Workout } from '../workouts/model';
 import { validateRoute } from '../ride/terrain';
 import type { PilotReport } from '../trainer/pilot-evidence';
+import { stockWheel, validateWheel, type WheelSetup } from '../ride/bike';
 export type Settings = {
   ftp: number | null;
   mass: number;
   bikeMass?: number;
+  wheel?: WheelSetup;
   quality: 'high' | 'low';
 };
-export const defaults: Settings = { ftp: null, mass: 75, bikeMass: 9, quality: 'high' };
+export const defaults: Settings = {
+  ftp: null,
+  mass: 70,
+  bikeMass: 9,
+  wheel: stockWheel,
+  quality: 'high',
+};
 const db = () =>
   openDB('bikesim', 1, {
     upgrade(db) {
@@ -19,7 +27,7 @@ const db = () =>
     },
   });
 export async function loadSettings(): Promise<Settings> {
-  return { ...defaults, ...(await (await db()).get('settings', 'rider')) };
+  return structuredClone({ ...defaults, ...(await (await db()).get('settings', 'rider')) });
 }
 export async function saveSettings(settings: Settings) {
   await (await db()).put('settings', settings, 'rider');
@@ -74,6 +82,7 @@ export async function restoreBackup(raw: unknown) {
   for (const s of b.sessions) {
     validateWorkout(s.workout);
     if (s.route) validateRoute(s.route);
+    if (s.wheel) validateWheel(s.wheel);
     if (
       (s.mode !== undefined && !['sim', 'erg'].includes(s.mode)) ||
       (s.route && s.mode !== 'sim') ||
@@ -125,6 +134,7 @@ export async function restoreBackup(raw: unknown) {
         b.settings.bikeMass > 30))
   )
     throw new Error('Invalid settings in backup.');
+  if (b.settings.wheel) validateWheel(b.settings.wheel);
   const tx = (await db()).transaction(['workouts', 'sessions', 'settings'], 'readwrite');
   for (const w of b.workouts) await tx.objectStore('workouts').put(w);
   for (const s of b.sessions)

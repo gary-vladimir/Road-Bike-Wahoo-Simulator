@@ -1,6 +1,6 @@
 # Physical setup, startup load, and riding modes
 
-**September 10 update:** see the [flywheel review](FLYWHEEL_REVIEW.md) for the current next step. The repeated low-power ERG test is not the reference for realistic road feel; establish a comfortable Wahoo SIM comparison first. Earlier baseline instructions below remain context for ERG testing.
+**September 10 update:** the rider confirmed **70 kg**, **700×32C stock tubeless tires**, and realistic Wahoo Simulation slope response with natural shifting. BikeSIM's editable profile now uses these defaults; 9 kg bike mass and 2155 mm tire circumference remain estimates. Next is the separately armed ±1% BikeSIM SIM test in [HT-3](HARDWARE_TESTS.md). Earlier baseline and cadence instructions below apply to ERG testing, not the new SIM test. No repeat Wahoo/ERG comparison is required to proceed.
 
 September 8, 2026. Supersedes the assumption that reaching 50 rpm is necessarily an easy initial hardware check. No hardware commands were sent for this review.
 
@@ -38,4 +38,4 @@ Implementation requirements for the next control phase:
 4. Let physical shifts change cadence and pedal force naturally. Do not multiply measured power by a guessed gear ratio or invent a gear-position sensor. A manual drivetrain profile may describe the equipment, but it does not identify the currently selected cog.
 5. Keep workout guidance separate from the control mode: in SIM, the rider shifts/paces to follow a suggested target; in ERG, the trainer pursues the watt target. The current procedural scene is not yet geographically accurate road simulation.
 
-The September 8 implementation adds free road previews and a mock-tested SIM command/controller module. Real Bluetooth remains disconnected from that module: baseline and trainer-profile confirmations are not inferred from the app's weight defaults. The existing ERG pilot remains a diagnostic step, not the final realistic riding experience.
+The September 10 implementation connects the SIM controller to real Bluetooth only through an explicit manual ±1% pilot. It allows fresh zero-watt/zero-cadence coasting. The readiness checkbox confirms the comfortable baseline and matching Wahoo profile; neither is inferred from app defaults. FTMS SIM does not transmit rider mass or tire size, so changing BikeSIM settings does not rewrite Wahoo's profile. Ordinary route rides remain read-only until the manual SIM response is physically verified. See [physics details](ROAD_PHYSICS.md).

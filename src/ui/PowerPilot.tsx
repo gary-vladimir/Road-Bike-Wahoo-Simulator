@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { Download, Square } from 'lucide-react';
 import { ErgPilot, type PilotSnapshot } from '../trainer/pilot';
 import { trainer } from '../trainer/bluetooth';
-import { download, loadPilotReport, savePilotReport } from '../storage/store';
+import { download, loadPilotReport, savePilotReport, type Settings } from '../storage/store';
+import { stockWheel, wheelLabel } from '../ride/bike';
 import {
   lastPowerAcknowledgement,
   PilotEvidence,
@@ -18,15 +19,17 @@ const initial = (): PilotSnapshot => ({
   machineStatus: [],
 });
 type Props = {
+  settings: Settings;
   registerStop: (stop: (() => Promise<void>) | null) => void;
   onActiveChange: (active: boolean) => void;
 };
-export default function PowerPilot({ registerStop, onActiveChange }: Props) {
+export default function PowerPilot({ settings, registerStop, onActiveChange }: Props) {
   const device = useSyncExternalStore(trainer.subscribe, trainer.getSnapshot);
   const [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
   const [snapshot, setSnapshot] = useState<PilotSnapshot>(initial);
+  const [mode, setMode] = useState<'erg' | 'sim'>('erg');
   const [savedReport, setSavedReport] = useState<PilotReport>();
   const [saveError, setSaveError] = useState('');
   const [observationTime, setObservationTime] = useState(performance.now());
@@ -124,29 +127,82 @@ export default function PowerPilot({ registerStop, onActiveChange }: Props) {
   const acknowledgedWatts = acknowledged?.watts ?? null;
   const plateaus = finishedReport.current?.plateaus ?? summarizePlateaus(evidence.current.samples);
   const observed = evidence.current.samples.at(-1);
+  const simAck = snapshot.audit
+    .filter(
+      (e) =>
+        e.event === 'acknowledgement' &&
+        e.bytes?.[0] === 0x11 &&
+        e.bytes.length === 7 &&
+        e.result === 1,
+    )
+    .at(-1);
+  const acknowledgedGrade = simAck
+    ? new DataView(Uint8Array.from(simAck.bytes!).buffer).getInt16(3, true) / 100
+    : null;
   return (
     <section className="panel power-pilot">
       <div className="eyebrow">SUPERVISED HARDWARE CHECK</div>
-      <h2>Check ERG target response.</h2>
-      <p>
-        Click Start, then pedal up to 50 rpm. The test waits without changing resistance until fresh
-        power and cadence arrive. It starts at 50 W, with gradual changes up to 100 W. Space or
-        Escape stops the test. ERG adjusts braking to hold the requested total watts. It can reduce
-        your previous load. At the same steady cadence, 100 W should require more pedal effort than
-        50 W; a soft feel alone does not establish whether a target is being followed.
-      </p>
+      <div className="pilot-actions" aria-label="Trainer test mode">
+        {(['sim', 'erg'] as const).map((m) => (
+          <button
+            className="secondary"
+            key={m}
+            aria-pressed={mode === m}
+            disabled={active}
+            onClick={() => {
+              if (m === mode) return;
+              setMode(m);
+              setReady(false);
+              setError('');
+              setSnapshot(initial());
+              endedAt.current = undefined;
+              finishedReport.current = undefined;
+              evidence.current = new PilotEvidence();
+              pilot.current = null;
+            }}
+          >
+            {m === 'sim' ? 'SIM · terrain test' : 'ERG · power test'}
+          </button>
+        ))}
+      </div>
+      <h2>{mode === 'sim' ? 'Check SIM road feel.' : 'Check ERG target response.'}</h2>
+      {mode === 'sim' ? (
+        <p>
+          Start on a flat road, then try small slopes from −1% to +1%. Changes are limited to 0.25
+          percentage points per second. Shift naturally and coast whenever you want: fresh zero
+          watts and zero cadence are valid. Space or Escape ends the test.
+        </p>
+      ) : (
+        <p>
+          Click Start, then pedal up to 50 rpm. The test waits without changing resistance until
+          fresh power and cadence arrive. It starts at 50 W, with gradual changes up to 100 W. Space
+          or Escape stops the test. ERG adjusts braking to hold the requested total watts. It can
+          reduce your previous load. At the same steady cadence, 100 W should require more pedal
+          effort than 50 W; a soft feel alone does not establish whether a target is being followed.
+        </p>
+      )}
       <p>
         Stop cancels a waiting test or sends the trainer stop command. Telemetry stays connected
         after an acknowledged stop. If a command fails, the connection may close and load may
         remain. The rider has observed heavier resistance returning after this test ends; Stop is
         not an unload button.
       </p>
-      <p>
-        Use the small front chainring and a middle rear cog for this diagnostic. Keep a comfortable,
-        steady cadence above 50 rpm; you do not need to spin fast or chase watts. Hold each target
-        for 20 seconds after acknowledgement if comfortable. The first 10 seconds allow settling.
-        Falling below 50 rpm ends the test and can bring back the previous heavier feel.
-      </p>
+      {mode === 'sim' ? (
+        <p>
+          First end Wahoo’s control session. Its trainer profile must match your {settings.mass} kg
+          weight and {wheelLabel(settings.wheel ?? stockWheel)} tires. BikeSIM sends slope and road
+          coefficients; it does not rewrite that profile. Flat SIM still includes road load. This
+          diagnostic changes physical resistance but does not yet control a complete route.
+        </p>
+      ) : (
+        <p>
+          Use the small front chainring and a middle rear cog for this diagnostic. Keep a
+          comfortable, steady cadence above 50 rpm; you do not need to spin fast or chase watts.
+          Hold each target for 20 seconds after acknowledgement if comfortable. The first 10 seconds
+          allow settling. Falling below 50 rpm ends the test and can bring back the previous heavier
+          feel.
+        </p>
+      )}
       <label className="pilot-consent">
         <input
           type="checkbox"
@@ -154,7 +210,9 @@ export default function PowerPilot({ registerStop, onActiveChange }: Props) {
           disabled={active}
           onChange={(e) => setReady(e.target.checked)}
         />{' '}
-        I’m on the bike and ready for this 50–100 W test.
+        {mode === 'sim'
+          ? `I’m ready for SIM, the starting load is comfortable, Wahoo control is disconnected, and its profile matches ${settings.mass} kg / ${wheelLabel(settings.wheel ?? stockWheel)}.`
+          : 'I’m on the bike and ready for this 50–100 W test.'}
       </label>
       <div className="pilot-actions">
         <button
@@ -171,18 +229,34 @@ export default function PowerPilot({ registerStop, onActiveChange }: Props) {
             lastSaved.current = -Infinity;
             setSnapshot(initial());
             try {
-              const session = await ErgPilot.prepare(trainer.getPilotDevice(), (state) => {
-                if (!mounted.current || attempt.current !== current) return;
-                latest.current = state;
-                setSnapshot(state);
-                if (state.state === 'stopped' || state.state === 'faulted') setReady(false);
-              });
+              const session = await ErgPilot.prepare(
+                trainer.getPilotDevice(mode),
+                (state) => {
+                  if (!mounted.current || attempt.current !== current) return;
+                  state = {
+                    ...state,
+                    setup: {
+                      riderMass: settings.mass,
+                      tire: wheelLabel(settings.wheel ?? stockWheel),
+                      circumferenceMm: (settings.wheel ?? stockWheel).circumferenceMm,
+                    },
+                  };
+                  latest.current = state;
+                  setSnapshot(state);
+                  if (state.state === 'stopped' || state.state === 'faulted') setReady(false);
+                },
+                mode,
+              );
               if (!mounted.current || attempt.current !== current) {
                 await session.stop();
                 return;
               }
               pilot.current = session;
-              await session.start();
+              await session.start(
+                mode === 'sim'
+                  ? { baselineConfirmed: ready, trainerProfileConfirmed: ready }
+                  : undefined,
+              );
             } catch (err) {
               if (mounted.current && attempt.current === current) {
                 setError((err as Error).message);
@@ -193,17 +267,22 @@ export default function PowerPilot({ registerStop, onActiveChange }: Props) {
             }
           }}
         >
-          Start 50 W test
+          {mode === 'sim' ? 'Start flat SIM test' : 'Start 50 W test'}
         </button>
-        {[50, 75, 100].map((watts) => (
+        {(mode === 'sim' ? [-1, -0.5, 0, 0.5, 1] : [50, 75, 100]).map((watts) => (
           <button
             className="secondary"
             key={watts}
-            aria-pressed={snapshot.requested === watts}
+            aria-pressed={
+              (mode === 'sim' ? (snapshot.requestedGrade ?? 0) : snapshot.requested) === watts
+            }
             disabled={snapshot.state !== 'running'}
-            onClick={() => pilot.current?.setTarget(watts)}
+            onClick={() =>
+              mode === 'sim' ? pilot.current?.setGrade(watts) : pilot.current?.setTarget(watts)
+            }
           >
-            {watts} W
+            {watts}
+            {mode === 'sim' ? '% slope' : ' W'}
           </button>
         ))}
         <button
@@ -215,14 +294,17 @@ export default function PowerPilot({ registerStop, onActiveChange }: Props) {
           {snapshot.state === 'stopping' ? 'Stopping trainer…' : 'Stop trainer test'}
         </button>
       </div>
-      <div className="diagnostic-metrics pilot-response" aria-label="ERG response measurements">
+      <div
+        className="diagnostic-metrics pilot-response"
+        aria-label={mode === 'sim' ? 'SIM response measurements' : 'ERG response measurements'}
+      >
         <div>
-          <strong>{snapshot.requested}</strong>
-          <span>selected W</span>
+          <strong>{mode === 'sim' ? (snapshot.requestedGrade ?? 0) : snapshot.requested}</strong>
+          <span>{mode === 'sim' ? 'selected slope %' : 'selected W'}</span>
         </div>
         <div>
-          <strong>{acknowledgedWatts ?? '—'}</strong>
-          <span>acknowledged W</span>
+          <strong>{(mode === 'sim' ? acknowledgedGrade : acknowledgedWatts) ?? '—'}</strong>
+          <span>{mode === 'sim' ? 'acknowledged slope %' : 'acknowledged W'}</span>
         </div>
         <div>
           <strong>{observed?.power ?? '—'}</strong>
@@ -242,9 +324,13 @@ export default function PowerPilot({ registerStop, onActiveChange }: Props) {
       )}
       <p role="status">
         {busy && snapshot.state === 'idle' ? 'Preparing test…' : snapshot.state} ·{' '}
-        {acknowledgedWatts === null
-          ? 'no power target acknowledged'
-          : `last acknowledged target ${acknowledgedWatts} W`}
+        {mode === 'sim'
+          ? acknowledgedGrade === null
+            ? 'no slope acknowledged'
+            : `last acknowledged slope ${acknowledgedGrade}%`
+          : acknowledgedWatts === null
+            ? 'no power target acknowledged'
+            : `last acknowledged target ${acknowledgedWatts} W`}
       </p>
       {snapshot.message && <p role="status">{snapshot.message}</p>}
       {error && (

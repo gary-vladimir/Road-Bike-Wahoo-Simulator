@@ -43,6 +43,7 @@ describe('local persistence and backup boundaries', () => {
       bikeMass: 10,
     });
     await saveSession(e.session);
+    expect((await loadSessions())[0].wheel?.circumferenceMm).toBe(2155);
     const b = await backup();
     globalThis.indexedDB = new IDBFactory();
     await restoreBackup(b);
@@ -55,6 +56,18 @@ describe('local persistence and backup boundaries', () => {
     b.sessions[0].route!.points[0].grade = 100;
     await expect(restoreBackup(b)).rejects.toThrow('route profile');
     expect((await loadSessions())[0].route?.points[0].grade).toBe(0);
+  });
+  it('defaults to the confirmed setup, preserves stored weights and rejects invalid wheel imports atomically', async () => {
+    expect(await loadSettings()).toMatchObject({
+      mass: 70,
+      wheel: { beadSeatMm: 622, tireWidthMm: 32, circumferenceMm: 2155 },
+    });
+    await saveSettings({ ftp: null, mass: 72, quality: 'low' });
+    expect((await loadSettings()).mass).toBe(72);
+    const b = await backup();
+    b.settings.wheel!.circumferenceMm = 0;
+    await expect(restoreBackup(b)).rejects.toThrow('wheel');
+    expect((await loadSettings()).wheel!.circumferenceMm).toBe(2155);
   });
   it('round-trips custom workouts, profile and ride samples', async () => {
     const workout = { ...structuredClone(presets[0]), id: 'custom-example', custom: true };

@@ -52,11 +52,13 @@ function Ribbon({
 }
 function World({
   speed,
+  distance,
   grade,
   quality,
   onReady,
 }: {
   speed: number;
+  distance?: number;
   grade: number;
   quality: string;
   onReady?: () => void;
@@ -90,7 +92,11 @@ function World({
       setTimeout(() => onReady?.(), 0);
     }
     const dt = Math.min(delta, 0.1);
-    travel.current += (speed / 3.6) * dt;
+    // Ride distance comes from physics, so scenery cannot lag the odometer on slow frames.
+    if (distance !== undefined)
+      travel.current =
+        speed === 0 ? distance : THREE.MathUtils.damp(travel.current, distance, 15, dt);
+    else travel.current += (speed / 3.6) * dt;
     smoothGrade.current = THREE.MathUtils.damp(smoothGrade.current, grade, 0.3, dt);
     state.camera.position.set(curve(0) + 1.7, 1.65, 3);
     state.camera.lookAt(curve(50) + 1.7, 1.1 + smoothGrade.current * 0.5, -50);
@@ -206,11 +212,13 @@ class SceneBoundary extends Component<
 }
 function RoadScene({
   speed = 0,
+  distance,
   grade = 0,
   quality = 'high',
   onReady,
 }: {
   speed?: number;
+  distance?: number;
   grade?: number;
   quality?: string;
   onReady?: () => void;
@@ -223,7 +231,13 @@ function RoadScene({
         camera={{ fov: 64, near: 0.5, far: 1000 }}
         gl={{ antialias: quality !== 'low', powerPreference: 'high-performance' }}
       >
-        <World speed={speed} grade={grade} quality={quality} onReady={onReady} />
+        <World
+          speed={speed}
+          distance={distance}
+          grade={grade}
+          quality={quality}
+          onReady={onReady}
+        />
       </Canvas>
     </SceneBoundary>
   );

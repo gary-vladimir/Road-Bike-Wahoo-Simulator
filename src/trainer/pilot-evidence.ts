@@ -26,6 +26,8 @@ export type EvidenceSample = {
   cadence: number | null;
   cadenceAt: number | null;
   speed: number | null;
+  grade?: number;
+  requestedGrade?: number;
 };
 const fresh = (value: number | undefined, at: number | undefined, now: number) =>
   Number.isFinite(value) &&
@@ -55,7 +57,13 @@ export class PilotEvidence {
     this.samples.push({
       at: now,
       phase: snapshot.state,
-      requested: ['idle', 'waiting'].includes(snapshot.state) ? null : snapshot.requested,
+      requested:
+        snapshot.mode === 'sim' || ['idle', 'waiting'].includes(snapshot.state)
+          ? null
+          : snapshot.requested,
+      ...(snapshot.mode === 'sim'
+        ? { grade: snapshot.grade, requestedGrade: snapshot.requestedGrade }
+        : {}),
       acknowledged: ack?.watts ?? null,
       acknowledgedAt: ack?.at ?? null,
       power: fresh(t.power, t.powerAt, now) ? t.power! : null,

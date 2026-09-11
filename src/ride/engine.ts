@@ -1,6 +1,7 @@
 import { position, totalSeconds, validateWorkout, type Workout } from '../workouts/model';
 import type { Telemetry } from '../trainer/ftms';
 import { advanceRoad, routeLength, routePosition, validateRoute, type Route } from './terrain';
+import { stockWheel, validateWheel, type WheelSetup } from './bike';
 export type Source = 'demo' | 'bluetooth';
 export type Phase = 'countdown' | 'running' | 'paused' | 'finished';
 export type Sample = {
@@ -33,6 +34,8 @@ export type Session = {
   ftp: number | null;
   mass: number;
   bikeMass?: number;
+  wheel?: WheelSetup;
+  physicsVersion?: number;
   mode?: 'sim' | 'erg';
   route?: Route;
   elapsed: number;
@@ -64,7 +67,7 @@ export class RideEngine {
     source: Source,
     ftp: number | null,
     mass: number,
-    options?: { route?: Route; bikeMass?: number },
+    options?: { route?: Route; bikeMass?: number; wheel?: WheelSetup },
   ) {
     validateWorkout(workout);
     if (
@@ -76,6 +79,7 @@ export class RideEngine {
       throw new Error('Enter FTP between 50–600 W and rider mass between 35–200 kg.');
     if (options?.route) validateRoute(options.route);
     const bikeMass = options?.bikeMass ?? 9;
+    validateWheel(options?.wheel ?? stockWheel);
     if (!Number.isFinite(bikeMass) || bikeMass < 4 || bikeMass > 30)
       throw new Error('Bike mass must be 4–30 kg');
     this.session = {
@@ -85,6 +89,8 @@ export class RideEngine {
       ftp,
       mass,
       bikeMass,
+      wheel: structuredClone(options?.wheel ?? stockWheel),
+      physicsVersion: 2,
       mode: options?.route ? 'sim' : 'erg',
       route: options?.route ? structuredClone(options.route) : undefined,
       startedAt: new Date().toISOString(),
@@ -158,16 +164,23 @@ export class RideEngine {
           ? telemetry!.cadence
           : undefined;
     }
-    const motion = advanceRoad(
-      this.state.speed,
-      this.state.power ?? 0,
-      this.state.grade,
-      this.session.mass,
-      this.session.bikeMass ?? 9,
-      step,
-    );
-    this.state.speed = motion.speed;
-    this.state.distance += motion.distance;
+    // Sample the terrain along the path, including during a long (but valid) timer step.
+    const motionSteps = Math.max(1, Math.ceil(step / 0.05));
+    for (let i = 0; i < motionSteps; i++) {
+      const grade = this.session.route
+        ? routePosition(this.session.route, this.state.distance * 1000).grade
+        : this.state.grade;
+      const motion = advanceRoad(
+        this.state.speed,
+        this.state.power ?? 0,
+        grade,
+        this.session.mass,
+        this.session.bikeMass ?? 9,
+        step / motionSteps,
+      );
+      this.state.speed = motion.speed;
+      this.state.distance += motion.distance;
+    }
     if (this.session.route) {
       this.state.distance = Math.min(routeLength(this.session.route) / 1000, this.state.distance);
       this.state.grade = routePosition(this.session.route, this.state.distance * 1000).grade;

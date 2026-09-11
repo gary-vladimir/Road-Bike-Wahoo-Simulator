@@ -573,6 +573,28 @@ footer > span:last-child {
   display: grid;
   gap: 16px;
 }
+.wheel-settings {
+  border: 1px solid var(--line);
+  padding: 18px;
+  margin: 20px 0;
+  border-radius: 10px;
+  min-width: 0;
+}
+.wheel-settings p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.coasting-state {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 250px;
+}
+.coasting-state span,
+.coasting-state small {
+  font-size: 12px;
+  line-height: 1.5;
+}
 .diagnostic-metrics.pilot-response {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -6,6 +6,7 @@ import type { Settings } from '../storage/store';
 import type { Workout } from '../workouts/model';
 import RoadScene from '../scene/RoadScene';
 import TerrainProfile from './TerrainProfile';
+import { stockWheel, wheelLabel } from '../ride/bike';
 export function routeWorkout(route: Route): Workout {
   const block = {
     name: 'Your own pace',
@@ -63,7 +64,7 @@ export default function RoadSetup({
           <div className="feature-foot">
             <Mountain size={20} />
             <div>
-              Free riding<span>Three procedural routes · Offline</span>
+              Free riding<span>{routes.length} procedural routes · Offline</span>
             </div>
           </div>
         </div>
@@ -136,7 +137,8 @@ export default function RoadSetup({
           </p>
           <p className="fine-print">
             Speed estimate: {settings.mass} kg rider + {settings.bikeMass ?? 9} kg bike. Edit weight
-            assumptions in Settings. No gear-position sensor is assumed.
+            and {wheelLabel(settings.wheel ?? stockWheel)} tires in Settings. No gear-position
+            sensor is assumed.
           </p>
         </aside>
       </div>

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Download, Save, Upload } from 'lucide-react';
 import { backup, download, restoreBackup, type Settings as RiderSettings } from '../storage/store';
+import { stockWheel, nominalCircumference, validateWheel, wheelLabel } from '../ride/bike';
 export default function Settings({
   settings,
   onSave,
@@ -13,6 +14,7 @@ export default function Settings({
   const [ftp, setFtp] = useState(settings.ftp?.toString() ?? ''),
     [mass, setMass] = useState(settings.mass.toString()),
     [bikeMass, setBikeMass] = useState((settings.bikeMass ?? 9).toString()),
+    [wheel, setWheel] = useState({ ...(settings.wheel ?? stockWheel) }),
     [quality, setQuality] = useState(settings.quality);
   const [message, setMessage] = useState('');
   const input = useRef<HTMLInputElement>(null);
@@ -31,6 +33,7 @@ export default function Settings({
                 ftp: ftp.trim() ? Number(ftp) : null,
                 mass: Number(mass),
                 bikeMass: Number(bikeMass),
+                wheel,
                 quality,
               };
               if (
@@ -44,6 +47,7 @@ export default function Settings({
                 next.bikeMass > 30
               )
                 throw new Error('Check the FTP and weight ranges.');
+              validateWheel(wheel);
               await onSave(next);
               setMessage('Settings saved.');
             } catch (err) {
@@ -82,8 +86,8 @@ export default function Settings({
               onChange={(e) => setMass(e.target.value)}
             />
             <small>
-              Used only for estimated virtual speed. 75 kg is the initial simulation assumption; the
-              bike estimate is editable below.
+              Used for gravity, acceleration, and rolling resistance. Your confirmed starting weight
+              is 70 kg; update it here as it changes.
             </small>
           </label>
           <label>
@@ -103,6 +107,67 @@ export default function Settings({
               physics only.
             </small>
           </label>
+          <fieldset className="wheel-settings">
+            <legend>Wheel & tire · {wheelLabel(wheel)}</legend>
+            <p>Default: your stock Giant Contend AR tubeless setup, 700×32C (32-622).</p>
+            <label>
+              Wheel diameter
+              <select
+                aria-label="Wheel diameter"
+                value={wheel.beadSeatMm}
+                onChange={(e) => {
+                  const beadSeatMm = Number(e.target.value);
+                  setWheel({
+                    ...wheel,
+                    beadSeatMm,
+                    circumferenceMm: nominalCircumference(beadSeatMm, wheel.tireWidthMm),
+                  });
+                }}
+              >
+                <option value={622}>700C · 622 mm rim</option>
+                <option value={584}>650B · 584 mm rim</option>
+                <option value={559}>26 inch · 559 mm rim</option>
+              </select>
+            </label>
+            <label>
+              Tire width (mm)
+              <input
+                aria-label="Tire width mm"
+                type="number"
+                min={20}
+                max={75}
+                step={1}
+                required
+                value={wheel.tireWidthMm}
+                onChange={(e) => {
+                  const tireWidthMm = Number(e.target.value);
+                  setWheel({
+                    ...wheel,
+                    tireWidthMm,
+                    circumferenceMm: nominalCircumference(wheel.beadSeatMm, tireWidthMm),
+                  });
+                }}
+              />
+            </label>
+            <label>
+              Wheel circumference (mm)
+              <input
+                aria-label="Wheel circumference mm"
+                type="number"
+                min={1700}
+                max={2500}
+                step={1}
+                required
+                value={wheel.circumferenceMm}
+                onChange={(e) => setWheel({ ...wheel, circumferenceMm: Number(e.target.value) })}
+              />
+              <small>
+                2155 mm is a nominal estimate for 700×32C. Enter a measured rollout for greater
+                accuracy. Used for virtual wheel rotation; power and road forces determine speed.
+                These settings do not rewrite the Wahoo profile.
+              </small>
+            </label>
+          </fieldset>
           <label>
             Graphics quality
             <select
@@ -162,9 +227,9 @@ export default function Settings({
           <hr />
           <h3>Trainer control</h3>
           <p>
-            This build reads Bluetooth telemetry. Automatic ERG and slope commands stay disabled
-            until supervised hardware validation. The demo models workout targets without
-            controlling your KICKR.
+            Road rides currently use demo or read-only Bluetooth power. The opt-in Trainer panel has
+            separate, manually started SIM and ERG tests. Automatic route resistance awaits the SIM
+            hardware check; starting a road ride does not control your KICKR.
           </p>
         </section>
       </div>

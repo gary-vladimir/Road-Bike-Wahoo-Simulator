@@ -5,7 +5,7 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     const writes: number[][] = [];
     Object.assign(window, { mockControlWrites: writes });
-    Object.assign(window, { mockCadence: 80, mockDelayPrepare: false });
+    Object.assign(window, { mockCadence: 80, mockPower: 50, mockDelayPrepare: false });
     const data = Object.assign(new EventTarget(), {
       uuid: 'indoor-bike-data',
       value: new DataView(Uint8Array.of(0x44, 0, 0, 0, 160, 0, 50, 0).buffer),
@@ -16,6 +16,7 @@ test.beforeEach(async ({ page }) => {
             (window as unknown as { mockCadence: number }).mockCadence * 2,
             true,
           );
+          data.value.setInt16(6, (window as unknown as { mockPower: number }).mockPower, true);
           data.dispatchEvent(new Event('characteristicvaluechanged'));
         }, 200);
         return data;
@@ -153,6 +154,48 @@ test('supervised pilot requires readiness and stops acknowledged mock hardware',
   await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: 'I’m on the bike and ready' }).check();
   await expect(start).toBeEnabled();
+});
+test('SIM hardware pilot permits coasting, uses only slope commands, and stops explicitly', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.evaluate(() => Object.assign(window, { mockCadence: 0, mockPower: 0 }));
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await page.getByRole('button', { name: 'Pair KICKR via Bluetooth' }).click();
+  await expect(page.getByText('Live power received', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'SIM · terrain test', exact: true }).click();
+  const start = page.getByRole('button', { name: 'Start flat SIM test', exact: true });
+  await expect(start).toBeDisabled();
+  await expect(page.getByText(/Falling below 50 rpm ends/)).not.toBeVisible();
+  await page.getByRole('checkbox', { name: /I’m ready for SIM/ }).check();
+  await start.click();
+  await expect(
+    page.getByText('running · last acknowledged slope 0%', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '1% slope', exact: true }).click();
+  await expect(page.getByText('running · last acknowledged slope 1%', { exact: true })).toBeVisible(
+    { timeout: 7000 },
+  );
+  await expect(page.getByRole('button', { name: 'ERG · power test', exact: true })).toBeDisabled();
+  await page.screenshot({ path: 'test-results/sim-pilot.png', fullPage: true });
+  await page.getByRole('button', { name: 'Stop trainer test', exact: true }).click();
+  await expect(
+    page.getByText('stopped · last acknowledged slope 1%', { exact: true }),
+  ).toBeVisible();
+  const writes = await page.evaluate(
+    () => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites,
+  );
+  expect(writes).toEqual([
+    [0],
+    [17, 0, 0, 0, 0, 40, 18],
+    [7],
+    [17, 0, 0, 25, 0, 40, 18],
+    [17, 0, 0, 50, 0, 40, 18],
+    [17, 0, 0, 75, 0, 40, 18],
+    [17, 0, 0, 100, 0, 40, 18],
+    [8, 1],
+  ]);
+  await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();
 });
 
 test('shows measured power independently of accepted targets and preserves evidence across reload', async ({

@@ -36,6 +36,21 @@ export const routes: Route[] = [
     ],
   },
   {
+    id: 'descent',
+    name: 'Descent to the valley',
+    description:
+      'A 2 km downhill start, a level valley, then a gentle rise. Coast to feel gravity and momentum.',
+    points: [
+      { meters: 0, grade: -3 },
+      { meters: 500, grade: -3 },
+      { meters: 800, grade: 0 },
+      { meters: 1200, grade: 0 },
+      { meters: 1500, grade: 3 },
+      { meters: 1850, grade: 3 },
+      { meters: 2000, grade: 0 },
+    ],
+  },
+  {
     id: 'ascent',
     name: 'The steady ascent',
     description:
@@ -108,6 +123,8 @@ export const roadPhysics = {
   windResistance: 0.18,
   windSpeed: 0,
   efficiency: 0.97,
+  // Unknown crank torque/gearing at walking pace: bound the power-to-force conversion.
+  minimumDriveSpeed: 0.75,
 };
 export function advanceRoad(
   speed: number,
@@ -117,14 +134,41 @@ export function advanceRoad(
   bikeMass: number,
   seconds: number,
 ) {
-  const v = speed / 3.6,
-    mass = riderMass + bikeMass;
-  const angle = Math.atan(grade / 100),
-    relativeAir = v + roadPhysics.windSpeed;
-  const resistance =
-    mass * 9.81 * (roadPhysics.rollingResistance * Math.cos(angle) + Math.sin(angle)) +
-    roadPhysics.windResistance * relativeAir * Math.abs(relativeAir);
-  const force = (Math.max(0, power) * roadPhysics.efficiency) / Math.max(v, 2);
-  const next = Math.min(25, Math.max(0, v + ((force - resistance) / mass) * seconds));
-  return { speed: next * 3.6, distance: ((v + next) * 0.5 * seconds) / 1000 };
+  if (
+    ![speed, power, grade, riderMass, bikeMass, seconds].every(Number.isFinite) ||
+    speed < 0 ||
+    speed > 150 ||
+    Math.abs(grade) > 30 ||
+    riderMass < 35 ||
+    riderMass > 200 ||
+    bikeMass < 4 ||
+    bikeMass > 30 ||
+    seconds < 0 ||
+    seconds > 2.5
+  )
+    throw new Error('Road physics input is outside supported limits');
+  let v = speed / 3.6,
+    distance = 0;
+  const mass = riderMass + bikeMass,
+    angle = Math.atan(grade / 100);
+  // Integrate at <=10 ms regardless of render frequency. Small steps retain momentum,
+  // reach a drag-limited downhill speed, and resolve stopping within a step.
+  const steps = Math.max(1, Math.ceil(seconds / 0.01)),
+    dt = seconds / steps;
+  for (let i = 0; i < steps; i++) {
+    const relativeAir = v + roadPhysics.windSpeed;
+    const resistance =
+      mass * 9.81 * (roadPhysics.rollingResistance * Math.cos(angle) + Math.sin(angle)) +
+      roadPhysics.windResistance * relativeAir * Math.abs(relativeAir);
+    const drive =
+      (Math.max(0, power) * roadPhysics.efficiency) / Math.max(v, roadPhysics.minimumDriveSpeed);
+    const acceleration = (drive - resistance) / mass;
+    const stopTime = acceleration < 0 && v + acceleration * dt < 0 ? v / -acceleration : dt;
+    const next = Math.min(150 / 3.6, Math.max(0, v + acceleration * stopTime));
+    distance += (v + next) * 0.5 * stopTime;
+    v = next;
+    // Forward-only riding: once an uphill coast stops, don't roll backward or add distance.
+    if (stopTime < dt) break;
+  }
+  return { speed: v * 3.6, distance: distance / 1000 };
 }

@@ -6,9 +6,10 @@ import {
 } from '../trainer/control';
 import { roadPhysics } from '../ride/terrain';
 import type { Telemetry } from '../trainer/ftms';
-/** Mock-transport integration only. No browser GATT adapter constructs this class yet. */
+/** Bounded SIM controller. Real hardware uses only the separately armed ±1% pilot. */
 export class SimulationSupervisor {
-  state: 'idle' | 'arming' | 'running' | 'stopping' | 'stopped' | 'faulted' = 'idle';
+  state: 'idle' | 'waiting' | 'arming' | 'running' | 'stopping' | 'stopped' | 'faulted' = 'idle';
+  stopConfirmed = false;
   grade = 0;
   message = '';
   private generation = 0;
@@ -46,7 +47,8 @@ export class SimulationSupervisor {
     // Coasting and low cadence are valid in SIM; never impose ERG's 50 rpm threshold.
   }
   async arm(readiness: { baselineConfirmed: boolean; trainerProfileConfirmed: boolean }) {
-    if (this.state !== 'idle') throw new Error('Create a new SIM session to resume');
+    if (!['idle', 'waiting'].includes(this.state))
+      throw new Error('Create a new SIM session to resume');
     if (!readiness.baselineConfirmed || !readiness.trainerProfileConfirmed)
       throw new Error(
         'Confirm the comfortable baseline and trainer mass/profile before SIM control',
@@ -107,6 +109,26 @@ export class SimulationSupervisor {
       this.busy = false;
     }
   }
+  preflight(): string | null {
+    try {
+      this.guard();
+      return null;
+    } catch (error) {
+      return (error as Error).message;
+    }
+  }
+  async checkTelemetry() {
+    if (this.ending) {
+      await this.ending;
+      return;
+    }
+    if (this.state !== 'running') return;
+    try {
+      this.guard();
+    } catch (error) {
+      await this.end((error as Error).message);
+    }
+  }
   stop() {
     return this.end();
   }
@@ -115,12 +137,15 @@ export class SimulationSupervisor {
   }
   private end(reason?: string): Promise<void> {
     if (this.ending) return this.ending;
-    const wasActive = this.state !== 'idle';
+    const wasActive = !['idle', 'waiting'].includes(this.state);
     ++this.generation;
     this.state = 'stopping';
     this.ending = (async () => {
       try {
-        if (wasActive || this.claimed) await this.queue.stop();
+        if (wasActive || this.claimed) {
+          await this.queue.stop();
+          this.stopConfirmed = true;
+        }
         this.state = reason ? 'faulted' : 'stopped';
         this.message = `${reason ? reason + '. ' : ''}${wasActive ? 'Stop acknowledged; physical unloading is unverified.' : 'Cancelled before control.'}`;
       } catch {

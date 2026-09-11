@@ -1,6 +1,6 @@
 # BikeSIM
 
-A local, single-rider cycling simulator for the existing road bike and KICKR CORE 2. SIM road riding is the default experience, with three procedural Oaxaca-inspired routes, free pacing, elevation profiles, and coasting physics. ERG power workouts have their own library with eight presets and an editor. Demo and read-only Bluetooth rides save locally. Automatic terrain resistance is not enabled yet.
+A local, single-rider cycling simulator for the existing road bike and KICKR CORE 2. SIM road riding is the default experience, with four procedural Oaxaca-inspired routes, free pacing, elevation profiles, and coasting physics. ERG power workouts have their own library with eight presets and an editor. Demo and read-only Bluetooth rides save locally. Automatic terrain resistance is not enabled yet; a separate manual SIM test is ready for hardware validation.
 
 ## Run locally — Docker only
 
@@ -18,7 +18,9 @@ Alternatively, open the repository in a Dev Containers-compatible editor and cho
 
 ## Try it
 
-Start on **Ride**, choose a road, and select **Start road demo**. Adjust demo effort or press **Coast** during the ride. Hills occur at fixed distances; rider effort determines virtual speed. No FTP or cadence target is required. Completion is based on route distance, with a six-hour session limit. Settings exposes the disclosed 75 kg rider and 9 kg bike assumptions used for virtual physics.
+Start on **Ride**, choose a road, and select **Start road demo**. Adjust demo effort or press **Coast** during the ride. Hills occur at fixed distances; rider effort and road forces determine virtual speed. No FTP or cadence target is required. Completion is based on route distance, with a six-hour session limit. Settings defaults to the rider-confirmed **70 kg** and **700×32C tubeless tires**; bike mass remains an editable **9 kg estimate**. Tire dimensions and circumference are editable; 2155 mm is a geometric estimate, not a measured rollout.
+
+Try **Descent to the valley → Coast**: fresh zero watts and zero cadence continue accumulating distance downhill. Gravity can accelerate a descent from rest, while drag limits speed. On the flat, momentum decays gradually; uphill it decays faster and stops without rolling backward. Pausing or losing live telemetry explicitly freezes the ride, unlike coasting. See [physics assumptions and verification](docs/ROAD_PHYSICS.md).
 
 For a structured power workout:
 
@@ -38,17 +40,21 @@ After pairing, choose **KICKR · live power, read-only** on Ride to explore the 
 
 Live power workouts still require your known FTP. Their targets are guidance. Virtual speed is estimated from power, rider/bike mass, and grade; trainer-reported speed is shown only in diagnostics. Fresh power is required; losing it pauses either kind of ride.
 
-The SIM command encoder and bounded terrain controller are implemented and tested against a synthetic trainer, but are not connected to real Bluetooth. Automatic ERG/SIM ride control and Wi-Fi transport remain unavailable. See [hardware validation](docs/HARDWARE_TESTS.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+The SIM controller is connected to Bluetooth only through the separate, manually armed ±1% diagnostic pilot. Automatic ERG/SIM ride control and Wi-Fi transport remain unavailable. See [hardware validation](docs/HARDWARE_TESTS.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
-## Supervised ERG pilot
+## Supervised SIM and ERG pilots
 
-A separate diagnostic pilot is available for the hardware validation described in HT-2. Stop the existing BikeSIM development server before starting this opt-in server:
+A separate diagnostic panel supports HT-2 and HT-3 hardware validation. Stop the existing BikeSIM development server before starting this opt-in server:
 
 ```sh
 docker compose -f .devcontainer/compose.yaml exec -e VITE_TRAINER_CONTROL=pilot bikesim npm run dev
 ```
 
-Reload Chrome and open **Trainer**. Pairing remains read-only. Select the rider readiness checkbox and **Start 50 W test**; the test waits without resistance commands until fresh power/cadence and at least 50 rpm arrive. Stop cancels that waiting state immediately. Once running, targets are limited to 50–100 W with changes of at most 10 W per second. Stop, visibility loss, stale telemetry, or low cadence ends the test with a best-effort standard stop command. Telemetry stays connected after an acknowledged stop; an uncertain control failure closes the link. An acknowledged stop does not prove physical unloading. A disconnected or crashed browser cannot guarantee reduced resistance. Select readiness again to start a new test on the same connection.
+Reload Chrome and open **Trainer**. Pairing remains read-only. For the next physical check, select **SIM · terrain test**. End Wahoo's control session and confirm its rider/tire profile matches BikeSIM; the FTMS SIM payload does not transmit those profile values. Confirm a comfortable baseline and readiness, then **Start flat SIM test**. Select slopes from −1% through +1%; changes are limited to 0.25 percentage points per second. Fresh zero watts and zero cadence remain valid. Use physical gears naturally. No ERG power command is sent in SIM.
+
+The separate **ERG · power test** retains the 50–100 W diagnostic. Select readiness and **Start 50 W test**; it waits without resistance commands until fresh power/cadence and at least 50 rpm arrive. Target changes are limited to 10 W per second. ERG's low-cadence cutoff does not apply to SIM.
+
+Both tests have explicit Stop, visibility/freshness/timing checks, exclusive browser ownership, and serialized acknowledged writes. Telemetry stays connected after an acknowledged stop; an uncertain control failure closes the link. Stop does not prove physical unloading, and the previous heavier load may return. A disconnected or crashed browser cannot guarantee reduced resistance. Select readiness again to start a new test on the same connection.
 
 A full page refresh ends the browser's GATT session. BikeSIM attempts to restore **telemetry only** using the previously selected device and Chrome's `getDevices()` permission API. No control session or readiness is restored. If that API or saved permission is unavailable, use **Pair KICKR via Bluetooth**. The current Mac Chrome configuration did not restore its saved permission in the September 7 check, so seamless reconnection is not verified on this machine. **Reconnect KICKR** reuses the selected device within the current page without reopening the chooser. An intentional Disconnect disables refresh restoration for that tab. See [Chrome's saved-device sample](https://googlechrome.github.io/samples/web-bluetooth/get-devices.html) and [implementation status](https://github.com/WebBluetoothCG/web-bluetooth/blob/main/implementation-status.md).
 
@@ -79,4 +85,4 @@ docker compose -f .devcontainer/compose.yaml stop
 
 No accounts, analytics, remote fonts, CDN assets, or automatic uploads. The app runs without internet after setup; development dependencies require internet to install. Local storage is browser-profile storage, not app-level encryption. Download a backup in Settings before clearing browser data or changing browser/profile/origin. Imports merge IDs; matching records are replaced transactionally. A refreshed/closed ride is listed as interrupted and never restarts automatically.
 
-The scene is a procedural environment, not a surveyed Oaxaca route. Grade affects virtual speed and the scene, but does not yet change physical trainer resistance. Route sessions retain their profile, SIM mode, and mass assumptions in history/backups; their recorded target watts are zero to represent no power prescription. Real GPX routes, detailed Blender assets, FIT/Strava export, and automatic training prescriptions remain future work.
+The scene is a procedural environment, not a surveyed Oaxaca route. Route grade affects virtual speed and the scene; route-driven physical resistance awaits the separate SIM test. Route sessions retain their profile, SIM mode, mass, wheel setup, and physics version in history/backups; their recorded target watts are zero to represent no power prescription. Real GPX routes, detailed Blender assets, FIT/Strava export, and automatic training prescriptions remain future work.

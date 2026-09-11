@@ -1,6 +1,6 @@
 # Hardware validation log
 
-**Latest next step (September 10):** use the [flywheel review and Wahoo SIM comparison](FLYWHEEL_REVIEW.md). This supersedes repeating the low-power ERG protocol below as the next rider task. The latest log shows responding 50 W telemetry and a single reported cadence zero triggering Stop; physical flywheel engagement is not independently measured.
+**Latest next step (September 10):** the rider confirmed that Wahoo Simulation adds realistic slope resistance and permits natural shifting, with 700×32C configured. Rider weight is 70 kg. The separate BikeSIM **SIM · terrain test** is now implemented for HT-3 below. This supersedes repeating the low-power ERG protocol. Wahoo's success is rider-reported physical evidence; BikeSIM SIM road feel still needs its own check.
 
 ## HT-1 — Read-only Bluetooth telemetry
 
@@ -65,9 +65,17 @@ If settled power does not track these targets, compare the same low targets in W
 
 ## HT-3 — Supervised SIM handoff and terrain
 
-Status: **not ready for a physical test; mock controller implemented only**. No SIM command has been sent to the actual KICKR by this development work. Road previews send no control commands.
+Status: **bounded BikeSIM pilot ready for the rider's physical check; Wahoo SIM feel confirmed by the rider**. No SIM command has been sent to the actual KICKR by this development work. Road previews send no control commands.
 
-Before exposing this pilot, confirm the actual trainer's rider/bike mass configuration, capability checks, exclusive control session, comfortable baseline handoff, and HT-2 Stop observations. The UI must require a fresh explicit rider action. Validate initial flat SIM by physical feel, then small gradual slopes and physical shifting, coasting, Stop, and manual restart before connecting complete routes. A 0% SIM grade is road simulation with rolling/aerodynamic load, not a guaranteed unload. Do not run this proposed test through the ERG controls.
+The Bluetooth adapter checks SIM capability, acquires the same exclusive browser lock as ERG, and requires explicit readiness. Startup requests control, sends flat SIM parameters, then Start. Limits are ±1% with 0.25 percentage-point steps at most once per second. Fresh zero power/cadence is allowed; stale power, lost visibility/control, and timing faults end control. This browser lock cannot exclude another native app. Profile values are rider-confirmed, not read back or written through FTMS.
+
+1. In Wahoo, verify the rider profile is 70 kg and the tire size is 700×32C. End/disconnect Wahoo control before BikeSIM takes over. Keep a comfortable starting load; do not assume it survives the handoff unchanged.
+2. With no test running, reload BikeSIM to load the updated pilot. Pair again if needed. In **Trainer**, choose **SIM · terrain test** and confirm the displayed profile/readiness checkbox.
+3. Click **Start flat SIM test**. Confirm flat slope acknowledgement, a comfortable load, and natural shifting. No watt target or minimum cadence applies.
+4. If comfortable, select **0.5% slope**, then **1% slope**. Wait for the acknowledged slope to reach the selection. Shift naturally, coast briefly, and resume. Optionally compare **−0.5% slope**; no motor-driven downhill acceleration is promised.
+5. Click **Stop trainer test**. Confirm Stop acknowledgement and record the physical feel; heavier prior load may return. Leave the panel open for 15 seconds, then export the log. Report whether slope changes, coasting/re-engagement, and Stop worked as expected.
+
+This test changes physical resistance but does not advance a virtual route. Test virtual coasting separately with **Ride → Descent to the valley → Start road demo → Coast**. Full route control remains gated on BikeSIM handoff, slope, Stop, and restart observations. A 0% SIM grade includes rolling/aerodynamic load; it is not guaranteed unloading.
 
 ## HT-4 — First controlled ride/workout
 

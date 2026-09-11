@@ -4,7 +4,7 @@ test('SIM is the default, routes have elevation profiles, and ERG workouts remai
 }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Ride at your own pace.' })).toBeVisible();
-  await expect(page.locator('.route-grid .workout-card')).toHaveCount(3);
+  await expect(page.locator('.route-grid .workout-card')).toHaveCount(4);
   await page.getByRole('button', { name: /Rolling foothills Six kilometers/ }).click();
   await expect(page.locator('.workout-detail h2')).toHaveText('Rolling foothills');
   await expect(
@@ -54,4 +54,36 @@ test('road selection stays usable on a narrow screen', async ({ page }) => {
   await page.getByRole('button', { name: 'Start road demo', exact: true }).scrollIntoViewIfNeeded();
   await expect(page.getByRole('button', { name: 'Start road demo', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/terrain-mobile.png', fullPage: true });
+});
+test('confirmed profile is editable and the downhill demo coasts at zero watts', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.getByLabel('Rider weight kg', { exact: true })).toHaveValue('70');
+  await expect(page.getByLabel('Wheel diameter', { exact: true })).toHaveValue('622');
+  await expect(page.getByLabel('Tire width mm', { exact: true })).toHaveValue('32');
+  await expect(page.getByLabel('Wheel circumference mm', { exact: true })).toHaveValue('2155');
+  await page.getByLabel('Wheel circumference mm', { exact: true }).fill('2160');
+  await page.getByLabel('Graphics quality').selectOption('low');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByRole('status')).toHaveText('Settings saved.');
+  await page.reload();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.getByLabel('Wheel circumference mm', { exact: true })).toHaveValue('2160');
+  await page.getByRole('button', { name: 'Ride', exact: true }).click();
+  await page.getByRole('button', { name: /Descent to the valley A 2 km downhill/ }).click();
+  await page.getByRole('button', { name: 'Start road demo', exact: true }).click();
+  await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 18000 });
+  await page.getByRole('button', { name: 'Coast', exact: true }).click();
+  await expect(page.getByLabel('Motion status')).toContainText('Coasting · 0 W');
+  const distance = () => page.locator('.ride-metrics').innerText();
+  // The display rounds to 10 m; gravity needs more than five seconds to cross 5 m from rest.
+  await expect.poll(distance, { timeout: 15000 }).not.toContain('0.00 km ridden');
+  await expect(page.locator('.power-metric strong')).toHaveText('0W');
+  await page.screenshot({ path: 'test-results/downhill-coasting.png', fullPage: true });
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await page.getByRole('button', { name: 'Finish & save ride' }).click();
+  await expect(page.getByRole('heading', { name: 'Your ride, recorded.' })).toBeVisible();
 });

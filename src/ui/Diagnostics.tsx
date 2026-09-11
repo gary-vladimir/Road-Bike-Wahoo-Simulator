@@ -3,7 +3,8 @@ import { Bluetooth, Cable, Download, ShieldCheck, Unplug } from 'lucide-react';
 import { trainer } from '../trainer/bluetooth';
 import { download } from '../storage/store';
 import PowerPilot from './PowerPilot';
-export default function Diagnostics() {
+import type { Settings } from '../storage/store';
+export default function Diagnostics({ settings }: { settings: Settings }) {
   const pilotAvailable = import.meta.env.VITE_TRAINER_CONTROL === 'pilot';
   const stopTest = useRef<(() => Promise<void>) | null>(null);
   const registerStop = useCallback((stop: (() => Promise<void>) | null) => {
@@ -145,7 +146,13 @@ export default function Diagnostics() {
           </div>
         </section>
       </div>
-      {pilotAvailable && <PowerPilot registerStop={registerStop} onActiveChange={setPilotActive} />}
+      {pilotAvailable && (
+        <PowerPilot
+          settings={settings}
+          registerStop={registerStop}
+          onActiveChange={setPilotActive}
+        />
+      )}
       <section className="panel diagnostics-log">
         <div className="section-title">
           <h2>Connection log</h2>

@@ -8,6 +8,7 @@ import { trainer } from '../trainer/bluetooth';
 import { saveSession } from '../storage/store';
 import { routeLength, routePosition } from '../ride/terrain';
 import TerrainProfile from './TerrainProfile';
+import { stockWheel, virtualWheelRpm } from '../ride/bike';
 
 export default function Ride({
   engine,
@@ -111,6 +112,7 @@ export default function Ride({
       <div className="ride-world">
         <RoadScene
           speed={state.speed}
+          distance={state.distance * 1000}
           grade={state.grade}
           quality={quality}
           onReady={onSceneReady}
@@ -187,6 +189,32 @@ export default function Ride({
         <div>
           <b>{state.grade.toFixed(1)}%</b> visual grade
         </div>
+        {route && (
+          <div className="coasting-state" aria-label="Motion status">
+            <strong>
+              {state.phase !== 'running'
+                ? 'Ride paused'
+                : state.power === 0
+                  ? state.speed > 0.1
+                    ? 'Coasting · 0 W'
+                    : 'Stopped · pedal to move'
+                  : 'Pedaling'}
+            </strong>
+            <span>
+              {state.phase === 'running' && state.power === 0 && state.speed > 0.1
+                ? state.grade < -0.4
+                  ? 'Gravity and momentum carry you.'
+                  : state.grade > 0
+                    ? 'Climbing uses your momentum.'
+                    : 'Rolling and air drag slow you.'
+                : 'Road speed follows power, gravity, and momentum.'}
+            </span>
+            <small>
+              {Math.round(virtualWheelRpm(state.speed, engine.session.wheel ?? stockWheel))} virtual
+              wheel rpm
+            </small>
+          </div>
+        )}
       </div>
       {(storageError || fullscreenError) && (
         <div className="ride-warning" role="alert">

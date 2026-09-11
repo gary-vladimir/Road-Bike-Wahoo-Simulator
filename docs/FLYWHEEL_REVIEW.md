@@ -1,5 +1,7 @@
 # Flywheel momentum and the next physical check
 
+**Subsequent September 10 update:** the Wahoo SIM comparison below is complete by rider report: realistic added slope resistance and natural shifting, with 700×32C confirmed. Rider weight is 70 kg. The bounded BikeSIM SIM pilot and improved coasting physics are now implemented; [HT-3](HARDWARE_TESTS.md) is the next manual check. The original analysis below is retained as the reasoning/evidence record, not a request to repeat the Wahoo comparison.
+
 September 10, 2026. This review changes the next diagnostic step: stop repeating the low-power ERG test to establish road feel. No trainer-control commands were sent during this review.
 
 ## What the new evidence shows

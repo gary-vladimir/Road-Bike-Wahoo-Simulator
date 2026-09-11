@@ -44,16 +44,18 @@ export class BluetoothTrainer {
     };
   };
   getSnapshot = () => this.snapshot;
-  getPilotDevice() {
+  getPilotDevice(mode: 'erg' | 'sim' = 'erg') {
     if (import.meta.env.VITE_TRAINER_CONTROL !== 'pilot')
       throw new Error('Control is disabled in this build.');
     if (
       !this.device ||
       this.snapshot.status !== 'connected' ||
-      !this.snapshot.features?.erg ||
+      !(mode === 'sim' ? this.snapshot.features?.simulation : this.snapshot.features?.erg) ||
       !this.snapshot.range
     )
-      throw new Error('Connect an ERG-capable trainer with a known power range first.');
+      throw new Error(
+        `Connect a ${mode.toUpperCase()}-capable trainer with a known power range first.`,
+      );
     return {
       device: this.device,
       range: this.snapshot.range,

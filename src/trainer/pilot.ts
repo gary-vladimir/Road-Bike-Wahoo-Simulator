@@ -1,6 +1,7 @@
 import { ControlQueue, type AuditEntry, type ControlWire } from './control';
 import { PowerSupervisor, type PilotState } from '../safety/supervisor';
 import type { Telemetry } from './ftms';
+import { SimulationSupervisor } from '../safety/simulation';
 export type PilotSnapshot = {
   state: PilotState;
   applied: number;
@@ -8,6 +9,10 @@ export type PilotSnapshot = {
   message: string;
   audit: AuditEntry[];
   machineStatus: { at: number; bytes: number[] }[];
+  mode?: 'erg' | 'sim';
+  grade?: number;
+  requestedGrade?: number;
+  setup?: { riderMass: number; tire: string; circumferenceMm: number };
 };
 type PilotDevice = {
   device: BluetoothDevice;
@@ -33,7 +38,7 @@ async function acquireLock(): Promise<() => void> {
       .catch(reject);
   });
 }
-/** Bounded manual ERG pilot. Never created by connection or ordinary ride startup. */
+/** Explicit manual diagnostic only. Never created by pairing or ordinary ride startup. */
 export class ErgPilot {
   private timer?: ReturnType<typeof setInterval>;
   private target = 50;
@@ -41,7 +46,8 @@ export class ErgPilot {
   private shutdown?: Promise<void>;
   private checking = false;
   private controlAttempted = false;
-  private supervisor: PowerSupervisor;
+  private supervisor: PowerSupervisor | SimulationSupervisor;
+  private readiness = { baselineConfirmed: false, trainerProfileConfirmed: false };
   private status: BluetoothRemoteGATTCharacteristic;
   private point: BluetoothRemoteGATTCharacteristic;
   private queue: ControlQueue;
@@ -49,8 +55,11 @@ export class ErgPilot {
   private snapshot(): PilotSnapshot {
     return {
       state: this.supervisor.state,
-      applied: this.supervisor.applied,
-      requested: this.target,
+      applied: this.supervisor instanceof PowerSupervisor ? this.supervisor.applied : 0,
+      requested: this.mode === 'erg' ? this.target : 0,
+      mode: this.mode,
+      grade: this.supervisor instanceof SimulationSupervisor ? this.supervisor.grade : undefined,
+      requestedGrade: this.mode === 'sim' ? this.target : undefined,
       message: this.supervisor.message,
       audit: [...this.queue.audit],
       machineStatus: [...this.statuses],
@@ -99,6 +108,7 @@ export class ErgPilot {
     status: BluetoothRemoteGATTCharacteristic,
     private release: () => void,
     private changed: (s: PilotSnapshot) => void,
+    private mode: 'erg' | 'sim',
   ) {
     this.point = point;
     this.status = status;
@@ -116,16 +126,22 @@ export class ErgPilot {
         return () => point.removeEventListener('characteristicvaluechanged', notify);
       },
     };
-    this.queue = new ControlQueue(wire, { ...source.range, ceiling: 100 });
-    this.supervisor = new PowerSupervisor(
-      this.queue,
-      { ...source.range, ceiling: 100 },
-      source.telemetry,
-    );
+    const limits = {
+      ...source.range,
+      ceiling: 100,
+      ...(mode === 'sim' ? { simulation: { minGrade: -1, maxGrade: 1 } } : {}),
+    };
+    this.queue = new ControlQueue(wire, limits);
+    this.target = mode === 'sim' ? 0 : 50;
+    this.supervisor =
+      mode === 'sim'
+        ? new SimulationSupervisor(this.queue, limits, source.telemetry)
+        : new PowerSupervisor(this.queue, limits, source.telemetry);
   }
   static async prepare(
     source: PilotDevice,
     changed: (s: PilotSnapshot) => void,
+    mode: 'erg' | 'sim' = 'erg',
   ): Promise<ErgPilot> {
     if (import.meta.env.VITE_TRAINER_CONTROL !== 'pilot')
       throw new Error('Hardware control is disabled in this build.');
@@ -140,7 +156,7 @@ export class ErgPilot {
         status = await service.getCharacteristic(0x2ada);
       if (!point.properties.write || !point.properties.indicate)
         throw new Error('The trainer must support acknowledged control writes and indications.');
-      pilot = new ErgPilot(source, point, status, release, changed);
+      pilot = new ErgPilot(source, point, status, release, changed, mode);
       await point.startNotifications();
       status.addEventListener('characteristicvaluechanged', pilot.machineStatus);
       await status.startNotifications();
@@ -155,15 +171,25 @@ export class ErgPilot {
       throw error;
     }
   }
-  async start() {
+  async start(readiness?: { baselineConfirmed: boolean; trainerProfileConfirmed: boolean }) {
     if (this.disposed || document.hidden) {
       await this.stop();
       return;
     }
     if (this.supervisor.state !== 'idle') return;
+    if (
+      this.mode === 'sim' &&
+      (!readiness?.baselineConfirmed || !readiness.trainerProfileConfirmed)
+    ) {
+      await this.stop();
+      throw new Error('Confirm the comfortable SIM baseline and matching trainer profile first.');
+    }
+    if (readiness) this.readiness = { ...readiness };
     this.supervisor.state = 'waiting';
     this.supervisor.message =
-      'Waiting for pedaling. Reach 50 rpm to begin; no resistance commands sent yet.';
+      this.mode === 'sim'
+        ? 'Waiting for fresh power. Zero watts and coasting are valid; no cadence minimum.'
+        : 'Waiting for pedaling. Reach 50 rpm to begin; no resistance commands sent yet.';
     this.emit();
     this.timer = setInterval(() => {
       if (this.shutdown || this.disposed) return;
@@ -197,13 +223,16 @@ export class ErgPilot {
       return;
     const reason = this.supervisor.preflight();
     if (reason) {
-      this.supervisor.message = `Waiting for pedaling: ${reason}. No resistance commands sent yet.`;
+      this.supervisor.message = `Waiting for ${this.mode === 'sim' ? 'telemetry' : 'pedaling'}: ${reason}. No resistance commands sent yet.`;
       this.emit();
       return;
     }
     this.checking = true;
     try {
-      const arming = this.supervisor.arm();
+      const arming =
+        this.supervisor instanceof SimulationSupervisor
+          ? this.supervisor.arm(this.readiness)
+          : this.supervisor.arm();
       this.emit();
       await arming;
       const state = this.snapshot().state;
@@ -221,10 +250,18 @@ export class ErgPilot {
     }
   }
   setTarget(watts: number) {
+    if (this.mode !== 'erg') throw new Error('Power targets are unavailable in SIM mode.');
     if (!Number.isInteger(watts) || watts < 50 || watts > 100)
       throw new Error('The supervised test is limited to 50–100 W.');
     if (this.disposed || this.shutdown || this.supervisor.state !== 'running') return;
     this.target = watts;
+    this.emit();
+  }
+  setGrade(grade: number) {
+    if (this.mode !== 'sim' || !Number.isFinite(grade) || grade < -1 || grade > 1)
+      throw new Error('The supervised SIM test is limited to −1% through +1%.');
+    if (this.disposed || this.shutdown || this.supervisor.state !== 'running') return;
+    this.target = grade;
     this.emit();
   }
   async trip(reason: string) {

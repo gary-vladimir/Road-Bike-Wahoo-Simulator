@@ -1,5 +1,22 @@
 # Implementation status and decisions
 
+## September 10 delivery — current status
+
+This update supersedes conflicting September 9 details retained below as implementation history.
+
+- **Confirmed profile:** 70 kg rider and 700×32C stock tubeless tires. Settings now supports tire dimensions and circumference; 2155 mm circumference and 9 kg bike mass are disclosed estimates. Existing custom settings are preserved; this Mac's Chrome profile was explicitly saved with the confirmed values.
+- **Four routes and improved physics:** the new downhill-start route demonstrates gravity immediately. Zero watts/cadence can accelerate downhill and accumulate distance, while flat/uphill coasting slows gradually. Integration resolves stopping without phantom distance, samples terrain along the path, and preserves motion across update rates. The scene follows engine distance. [Assumptions and verification](ROAD_PHYSICS.md).
+- **Real SIM adapter implemented:** the opt-in Trainer panel has a separate ±1% SIM test, using quarter-percentage-point ramps at most once per second, fresh-power checks with zero cadence allowed, explicit readiness, shared ERG/SIM browser ownership, and acknowledged Stop/cancellation/fault handling. It sends no ERG watt targets. Evidence includes slope commands, observations, and confirmed app profile.
+- **Wahoo SIM confirmed by the rider:** slope changes feel realistic and physical shifting works. BikeSIM SIM response is not yet physically verified; no actual trainer control was sent during this development. Full route resistance remains disabled pending [HT-3](HARDWARE_TESTS.md).
+- **Profile boundary:** FTMS SIM has no mass/tire-size field. App settings do not rewrite Wahoo's profile; readiness requires matching profile and comfortable baseline confirmation. Exported values are not trainer readback. Cross-app persistence remains a physical check.
+- **Checks:** 73 unit tests pass, including analytical downhill terminal speed, gradual uphill stopping, mass/update-rate behavior, fresh-zero live coasting, wheel storage/imports, SIM lifecycle and existing six-hour soak. Browser checks cover editable profile persistence, visible zero-watt downhill distance, synthetic SIM slope/Stop commands, and existing ERG/reconnect/road/workout flows. These are software checks, not physical load validation.
+
+Final verification: all 16 container browser workflows passed, along with default and opt-in pilot production builds, formatting, and whitespace checks. Visual review confirmed the coasting HUD displays 0 W / 0 rpm while speed and distance increase. The existing large Three.js bundle warning remains; these checks do not establish physical trainer response or Mac frame rate.
+
+Next: the rider runs **Trainer → SIM · terrain test** as described in HT-3. No repeated low-power ERG test is required to establish the intended road mode. Route development can continue independently; automatic real resistance follows observed BikeSIM slope, coasting/re-engagement, handoff, and Stop behavior.
+
+## September 9 implementation history
+
 Updated September 9, 2026. Implements the initial usable slice and the rider's SIM-first direction after review of both implementation plans.
 
 ## Useful additions adopted from IMPLEMENTATION_PLAN.md
