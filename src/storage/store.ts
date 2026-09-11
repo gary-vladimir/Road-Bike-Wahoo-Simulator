@@ -113,9 +113,25 @@ export async function restoreBackup(raw: unknown) {
       if (
         !p ||
         ![p.elapsed, p.power, p.target, p.speed, p.distance, p.grade].every(Number.isFinite) ||
-        (p.cadence !== undefined && !Number.isFinite(p.cadence))
+        (p.cadence !== undefined && !Number.isFinite(p.cadence)) ||
+        (p.timestamp !== undefined && !Number.isFinite(p.timestamp))
       )
         throw new Error('Invalid sample in backup.');
+    if (s.recordedAt !== undefined && !Number.isFinite(s.recordedAt))
+      throw new Error('Invalid recording time in backup.');
+    if (
+      s.timerEvents !== undefined &&
+      (!Array.isArray(s.timerEvents) ||
+        s.timerEvents.length > 30000 ||
+        s.timerEvents.some(
+          (e: NonNullable<Session['timerEvents']>[number]) =>
+            !e ||
+            !Number.isFinite(e.timestamp) ||
+            !Number.isFinite(e.elapsed) ||
+            !['start', 'stop'].includes(e.type),
+        ))
+    )
+      throw new Error('Invalid timer events in backup.');
     for (const event of s.events)
       if (!event || !Number.isFinite(event.elapsed) || typeof event.message !== 'string')
         throw new Error('Invalid session event in backup.');
@@ -144,7 +160,7 @@ export async function restoreBackup(raw: unknown) {
   await tx.objectStore('settings').put(b.settings, 'rider');
   await tx.done;
 }
-export function download(name: string, content: string, type = 'application/json') {
+export function download(name: string, content: BlobPart, type = 'application/json') {
   const a = document.createElement('a');
   const url = URL.createObjectURL(new Blob([content], { type }));
   a.href = url;

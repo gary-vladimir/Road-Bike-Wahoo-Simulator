@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { Session } from '../ride/engine';
 import { clock } from '../workouts/model';
 import { download, sessionCsv } from '../storage/store';
+import ActivityExport from './ActivityExport';
 export function Summary({ session, onBack }: { session: Session; onBack: () => void }) {
   const samples = session.samples,
     mean = samples.length
@@ -30,7 +31,7 @@ export function Summary({ session, onBack }: { session: Session; onBack: () => v
       <div className="summary-stats">
         <div>
           <strong>{clock(session.elapsed)}</strong>
-          <span>moving time</span>
+          <span>active ride time</span>
         </div>
         <div>
           <strong>
@@ -56,9 +57,10 @@ export function Summary({ session, onBack }: { session: Session; onBack: () => v
         </div>
         <PowerChart session={session} />
       </section>
+      <ActivityExport key={session.id} session={session} />
       <div className="summary-actions">
         <button
-          className="primary"
+          className="secondary"
           onClick={() => download(`bikesim-${session.id}.json`, JSON.stringify(session, null, 2))}
         >
           <Download size={17} /> Export session JSON
@@ -71,8 +73,8 @@ export function Summary({ session, onBack }: { session: Session; onBack: () => v
         </button>
       </div>
       <p>
-        Saved locally. Virtual distance is estimated. FIT / Strava export will follow hardware
-        validation.
+        Saved locally. JSON preserves the complete BikeSIM session; CSV provides the recorded
+        samples.
       </p>
       {session.events.length > 0 && (
         <details className="panel">

@@ -5,6 +5,8 @@ import { stockWheel, validateWheel, type WheelSetup } from './bike';
 export type Source = 'demo' | 'bluetooth';
 export type Phase = 'countdown' | 'running' | 'paused' | 'finished';
 export type Sample = {
+  /** UTC milliseconds, anchored to the monotonic ride clock. Absent on older rides. */
+  timestamp?: number;
   elapsed: number;
   power: number;
   cadence?: number;
@@ -30,6 +32,8 @@ export type Session = {
   id: string;
   workout: Workout;
   startedAt: string;
+  timerEvents?: { timestamp: number; elapsed: number; type: 'start' | 'stop' }[];
+  recordedAt?: number;
   source: Source;
   ftp: number | null;
   mass: number;
@@ -59,6 +63,8 @@ export class RideEngine {
   };
   session: Session;
   private last?: number;
+  private wallOrigin?: number;
+  private timerRunning = false;
   private sampleElapsed = 0;
   private demoPower = 0;
   demoEffort = 100;
@@ -94,6 +100,7 @@ export class RideEngine {
       mode: options?.route ? 'sim' : 'erg',
       route: options?.route ? structuredClone(options.route) : undefined,
       startedAt: new Date().toISOString(),
+      timerEvents: [],
       elapsed: 0,
       distance: 0,
       status: 'in-progress',
@@ -103,6 +110,7 @@ export class RideEngine {
   }
   tick(now: number, telemetry?: Telemetry) {
     if (this.last === undefined) {
+      this.wallOrigin ??= Date.now() - now;
       this.last = now;
       return;
     }
@@ -127,7 +135,16 @@ export class RideEngine {
     }
     if (this.state.phase === 'countdown') {
       this.state.countdown = Math.max(0, this.state.countdown - dt);
-      if (this.state.countdown === 0) this.state.phase = 'running';
+      if (this.state.countdown === 0) {
+        this.state.phase = 'running';
+        this.session.recordedAt = this.wallOrigin! + now;
+        this.timerRunning = true;
+        this.session.timerEvents!.push({
+          timestamp: this.session.recordedAt,
+          elapsed: this.state.elapsed,
+          type: 'start',
+        });
+      }
       return;
     }
     const remaining = totalSeconds(this.session.workout) - this.state.elapsed;
@@ -186,16 +203,9 @@ export class RideEngine {
       this.state.grade = routePosition(this.session.route, this.state.distance * 1000).grade;
     }
     this.sampleElapsed += step;
+    this.session.recordedAt = this.wallOrigin! + now - (dt - step) * 1000;
     if (this.sampleElapsed >= 1) {
-      this.session.samples.push({
-        elapsed: this.state.elapsed,
-        power: this.state.power ?? 0,
-        cadence: this.state.cadence,
-        target: this.state.target,
-        speed: this.state.speed,
-        distance: this.state.distance,
-        grade: this.state.grade,
-      });
+      this.recordSample();
       this.sampleElapsed %= 1;
     }
     this.session.elapsed = this.state.elapsed;
@@ -207,6 +217,7 @@ export class RideEngine {
   }
   pause(reason = 'Paused. Your place is saved.') {
     if (this.state.phase === 'finished' || this.state.phase === 'paused') return;
+    this.stopTimer();
     this.state.phase = 'paused';
     this.state.reason = reason;
     this.state.speed = 0;
@@ -235,6 +246,7 @@ export class RideEngine {
   }
   finish(completed = false) {
     if (this.state.phase === 'finished') return;
+    this.stopTimer();
     this.state.phase = 'finished';
     this.state.speed = 0;
     this.session.status = completed ? 'completed' : 'stopped';
@@ -246,5 +258,29 @@ export class RideEngine {
           : 'Workout completed'
         : 'Ride ended',
     });
+  }
+  private recordSample() {
+    if (this.state.elapsed <= (this.session.samples.at(-1)?.elapsed ?? 0)) return;
+    this.session.samples.push({
+      timestamp: this.session.recordedAt,
+      elapsed: this.state.elapsed,
+      power: this.state.power ?? 0,
+      cadence: this.state.cadence,
+      target: this.state.target,
+      speed: this.state.speed,
+      distance: this.state.distance,
+      grade: this.state.grade,
+    });
+  }
+  private stopTimer() {
+    if (!this.timerRunning) return;
+    // Capture the final fraction of a second before pause/finish clears the displayed speed.
+    this.recordSample();
+    this.session.timerEvents!.push({
+      timestamp: this.session.recordedAt!,
+      elapsed: this.state.elapsed,
+      type: 'stop',
+    });
+    this.timerRunning = false;
   }
 }

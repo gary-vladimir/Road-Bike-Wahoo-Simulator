@@ -232,6 +232,9 @@ details p {
   gap: 14px;
   margin: 30px 0 20px;
 }
+.activity-export {
+  margin-top: 24px;
+}
 .summary-actions > .primary {
   width: auto;
 }

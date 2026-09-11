@@ -27,8 +27,18 @@ For a structured power workout:
 1. Open **Workouts** and select a preset. **First five minutes** is the shortest supplied preset.
 2. Choose **Demo · simulated rider** and start. Demo uses an explicitly labeled 200 W FTP example unless you enter your own FTP in Settings.
 3. Follow the countdown, power target, cadence cue, and interval profile. Adjust intensity, pause/resume, or stop with the buttons. `Space` or `Escape` pauses; resuming requires an explicit click.
-4. Finish the ride to see the summary. JSON and CSV downloads are available. History, custom workouts, profile settings, and periodic ride checkpoints persist in IndexedDB.
+4. Finish the ride to see the summary. **Download FIT for Strava** exports the activity for manual upload; JSON and CSV are also available. History, custom workouts, profile settings, and periodic ride checkpoints persist in IndexedDB.
 5. Use **Customize workout** to save an editable copy. Add/delete intervals and change their duration, starting/ending FTP percentage, and cadence target.
+
+## Export a ride to Strava
+
+1. Finish and save your ride, or open a saved ride from **Ride history**.
+2. Click **Download FIT for Strava** on its summary.
+3. Click **Open Strava file upload**, select the `.fit` file, review the activity, and save it in Strava.
+
+The file includes recording timestamps, active duration, pause events, power (including zero-watt coasting), available cadence, and virtual speed/distance. It is an indoor/virtual cycling **activity**, not a workout prescription or GPS course. New rides preserve actual pause durations; older rides use their saved start and active-time timeline because pause durations were not recorded. Recovered rides export up to their last saved checkpoint. Empty rides cannot export FIT. Demo files and their summary are clearly marked as simulated data.
+
+Generation happens locally and needs no Strava account connection or API credentials. BikeSIM does not upload anything automatically. Strava supports manual FIT import; final classification and derived statistics are determined by Strava. No GPS route, heart rate, or calorie estimate is invented. See [export details and verification](docs/STRAVA_EXPORT.md).
 
 ## Connect the KICKR
 
@@ -85,4 +95,4 @@ docker compose -f .devcontainer/compose.yaml stop
 
 No accounts, analytics, remote fonts, CDN assets, or automatic uploads. The app runs without internet after setup; development dependencies require internet to install. Local storage is browser-profile storage, not app-level encryption. Download a backup in Settings before clearing browser data or changing browser/profile/origin. Imports merge IDs; matching records are replaced transactionally. A refreshed/closed ride is listed as interrupted and never restarts automatically.
 
-The scene is a procedural environment, not a surveyed Oaxaca route. Route grade affects virtual speed and the scene; route-driven physical resistance awaits the separate SIM test. Route sessions retain their profile, SIM mode, mass, wheel setup, and physics version in history/backups; their recorded target watts are zero to represent no power prescription. Real GPX routes, detailed Blender assets, FIT/Strava export, and automatic training prescriptions remain future work.
+The scene is a procedural environment, not a surveyed Oaxaca route. Route grade affects virtual speed and the scene; route-driven physical resistance awaits the separate SIM test. Route sessions retain their profile, SIM mode, mass, wheel setup, and physics version in history/backups; their recorded target watts are zero to represent no power prescription. Real GPX routes, detailed Blender assets, and automatic training prescriptions remain future work. Strava transfer uses the manual FIT file workflow above.

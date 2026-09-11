@@ -13,6 +13,7 @@
     "test:browser": "playwright test"
   },
   "dependencies": {
+    "@garmin/fitsdk": "21.214.0",
     "@react-three/fiber": "9.7.0",
     "idb": "8.0.3",
     "lucide-react": "0.468.0",

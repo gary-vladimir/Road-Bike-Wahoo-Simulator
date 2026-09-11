@@ -1,5 +1,9 @@
 # Implementation status and decisions
 
+## September 11 — manual Strava export delivered
+
+Completed/stopped and recovered saved rides now expose **Download FIT for Strava** on the summary, including through history. The file is generated locally using Garmin's official FIT SDK; the rider manually imports it through Strava's file-upload page. No account integration or automatic upload is needed. Files preserve power/cadence, virtual speed/distance, and new per-record UTC timestamps/timer events so pauses are excluded from active duration. Older rides use their recorded active timeline with a visible limitation; demo data is explicitly labeled. See [export details](STRAVA_EXPORT.md). This supersedes the historical FIT deferral below.
+
 ## September 10 delivery — current status
 
 This update supersedes conflicting September 9 details retained below as implementation history.
