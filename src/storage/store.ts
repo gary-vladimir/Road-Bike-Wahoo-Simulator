@@ -84,6 +84,11 @@ export async function restoreBackup(raw: unknown) {
     if (s.route) validateRoute(s.route);
     if (s.wheel) validateWheel(s.wheel);
     if (
+      s.trainerControl !== undefined &&
+      (s.trainerControl !== 'sim' || s.source !== 'bluetooth' || s.mode !== 'sim' || !s.route)
+    )
+      throw new Error('Invalid trainer control mode in backup.');
+    if (
       (s.mode !== undefined && !['sim', 'erg'].includes(s.mode)) ||
       (s.route && s.mode !== 'sim') ||
       (s.mode === 'sim' && !s.route) ||

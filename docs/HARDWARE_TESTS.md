@@ -1,5 +1,36 @@
 # Hardware validation log
 
+## September 12 — next check: controlled Valley warm-up ride
+
+Automatic SIM road control is implemented in the opt-in build. Software tests use synthetic GATT; development tools have not started a physical ride. Use this check when ready; no further ERG test is needed first.
+
+1. With the trainer test/ride stopped, reload BikeSIM. Pair again if Chrome needs it. Confirm fresh telemetry, comfortable baseline, and matching Wahoo/BikeSIM weight and wheel settings; end Wahoo's trainer-control session.
+2. Open **Ride → Valley warm-up** and select **KICKR · automatic SIM terrain**. Confirm readiness and select **Start SIM road ride**. Flat SIM starts before the countdown; it may change the pre-existing load.
+3. Ride at your own cadence and shift naturally. The first 400 meters are flat, the road rises to +1% at 1 km, and later descends to −0.5% at 2.4 km. The HUD shows route grade and the last acknowledged trainer slope separately.
+4. Briefly coast and then re-engage while comfortable. Fresh 0 W / 0 rpm should continue the simulation without the ERG cadence cutoff. On this very gentle descent, drag can still slow a fast-moving rider; do not expect unlimited downhill acceleration.
+5. Pause, observe the Stop result and physical load, then resume deliberately when comfortable. Check the fresh countdown and return to terrain control. Stop may restore a heavier prior load; it does not promise unloading.
+6. Complete the 3 km road or choose **Pause → Finish & save ride**. Check that control ends and the saved summary opens. Download FIT and manually import it to Strava. Export session JSON if a problem occurs; it includes slope transitions and control outcomes.
+
+Report any unexpected disconnection, abrupt load, cadence-triggered stop, failed resume, or FIT import error. Do not deliberately provoke a disconnect under load for this first route check. The remaining steeper roads retain preview-only access until the controlled ride and recovery behavior have been checked.
+
+## September 11 — BikeSIM SIM response confirmed; ERG still under investigation
+
+The rider reports that BikeSIM's SIM terrain slope test worked well and that slope changes were clearly felt. This is physical feedback about BikeSIM, beyond the earlier successful Wahoo comparison. Record SIM slope response as confirmed; the message does not separately establish restart, connection-loss behavior, or a completed route. Full route-control integration is now the next development step. ERG validation is separate and does not block ordinary SIM road development.
+
+The rider still reports little perceived difference between ERG 50/75/100 W. The [saved September 11 ERG evidence](../tests/fixtures/kickr-erg-2026-09-11.json) was downloaded through the existing Chrome panel without starting a test, changing modes, reloading, or sending trainer commands. It matches the rider's screenshot:
+
+| Target | Observed interval | Post-settling average | Power samples | Cadence average |
+| ------ | ----------------- | --------------------- | ------------- | --------------- |
+| 50 W   | 12.5 s            | 61.5 W                | 2             | 73.5 rpm        |
+| 75 W   | 12.5 s            | 74.7 W                | 3             | 83.3 rpm        |
+| 100 W  | 23.0 s            | 88.2 W                | 13            | 74.6 rpm        |
+
+The table removes the first ten seconds and repeated sensor timestamps, leaving very few readings at 50 and 75 W. “Settled” describes a time exclusion, not proven steady cadence or convergence. The 75 W interval contains repeated 74–76 W readings and dips to 55–56 W. The 100 W interval repeatedly reports 99–100 W, interspersed with 74–75 W and one 50 W reading. All requested power ramps and the final Stop were acknowledged. This is evidence of a response, not accurate continuous target tracking or independent brake-force measurement. Power smoothing, cadence changes, and drivetrain engagement remain possible influences; no cause is established by this log alone.
+
+At about 56.9 seconds after the first control write, a sample reports 99 W with zero cadence; Stop is acknowledged at 57.17 seconds. The next distinct sample reports 100 W / 77 rpm, followed by zero-power readings. The ERG cadence guard again ends the test; calculated cadence cannot establish whether the rider actually stopped pedaling. The zero also lowers the 100 W cadence average.
+
+Wahoo explains that increasing cadence reduces ERG braking and that gear selection can limit achievable low power; it recommends a small front chainring and middle rear cog for a repeatable ERG comparison ([ERG guide](https://support.wahoofitness.com/hc/en-us/articles/4402565516946-A-Guide-to-using-ERG-mode)). The rider's current gear is not recorded. Do not assume a stuck resistance setting, bad cassette, or faulty trainer, and do not raise targets just to provoke stronger feel. If ERG is investigated further, compare longer steady-cadence holds in the same gear against Wahoo ERG with only one controller active. No additional ERG repetition is a prerequisite for SIM integration.
+
 **Latest next step (September 10):** the rider confirmed that Wahoo Simulation adds realistic slope resistance and permits natural shifting, with 700×32C configured. Rider weight is 70 kg. The separate BikeSIM **SIM · terrain test** is now implemented for HT-3 below. This supersedes repeating the low-power ERG protocol. Wahoo's success is rider-reported physical evidence; BikeSIM SIM road feel still needs its own check.
 
 ## HT-1 — Read-only Bluetooth telemetry
@@ -65,7 +96,7 @@ If settled power does not track these targets, compare the same low targets in W
 
 ## HT-3 — Supervised SIM handoff and terrain
 
-Status: **bounded BikeSIM pilot ready for the rider's physical check; Wahoo SIM feel confirmed by the rider**. No SIM command has been sent to the actual KICKR by this development work. Road previews send no control commands.
+Status: **BikeSIM SIM slope response confirmed by the rider on September 11; full-route integration and remaining lifecycle checks pending**. The rider operated the manual pilot. No SIM command was sent by the development tools. Road previews still send no control commands. The checklist below remains the protocol reference; do not ask the rider to repeat already-confirmed slope feel merely because this section contains the original instructions.
 
 The Bluetooth adapter checks SIM capability, acquires the same exclusive browser lock as ERG, and requires explicit readiness. Startup requests control, sends flat SIM parameters, then Start. Limits are ±1% with 0.25 percentage-point steps at most once per second. Fresh zero power/cadence is allowed; stale power, lost visibility/control, and timing faults end control. This browser lock cannot exclude another native app. Profile values are rider-confirmed, not read back or written through FTMS.
 

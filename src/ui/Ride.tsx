@@ -9,6 +9,8 @@ import { saveSession } from '../storage/store';
 import { routeLength, routePosition } from '../ride/terrain';
 import TerrainProfile from './TerrainProfile';
 import { stockWheel, virtualWheelRpm } from '../ride/bike';
+import { RoadControl } from '../ride/road-control';
+import { ErgPilot } from '../trainer/pilot';
 
 export default function Ride({
   engine,
@@ -27,6 +29,20 @@ export default function Ride({
   const onSceneReady = useCallback(() => setSceneReady(true), []);
   const container = useRef<HTMLDivElement>(null);
   const queue = useRef(Promise.resolve());
+  const control = useRef<RoadControl | null>(null);
+  const controlled = engine.session.trainerControl === 'sim';
+  const refresh = () => setState({ ...engine.state });
+  const arm = () => {
+    const controller = new RoadControl(
+      engine,
+      (changed) => ErgPilot.prepare(trainer.getPilotDevice('sim'), changed, 'sim'),
+      refresh,
+    );
+    control.current = controller;
+    void controller.start();
+    refresh();
+  };
+  const stopControl = () => control.current?.stop() ?? Promise.resolve();
   const persist = () => {
     const snapshot = structuredClone(engine.session);
     queue.current = queue.current
@@ -44,10 +60,13 @@ export default function Ride({
   };
   useEffect(() => {
     if (!sceneReady) return;
+    if (controlled && engine.state.phase === 'countdown') arm();
     void persist();
     let lastSave = performance.now();
     const timer = setInterval(() => {
-      engine.tick(performance.now(), trainer.snapshot.telemetry);
+      if (!controlled || control.current?.ready)
+        engine.tick(performance.now(), trainer.snapshot.telemetry);
+      control.current?.update();
       setState({ ...engine.state });
       if (performance.now() - lastSave > 5000) {
         lastSave = performance.now();
@@ -55,13 +74,15 @@ export default function Ride({
       }
       if (engine.state.phase === 'finished') {
         clearInterval(timer);
-        void persist().then(() => onFinish(structuredClone(engine.session)));
+        void stopControl()
+          .then(persist)
+          .then(() => onFinish(structuredClone(engine.session)));
       }
     }, 100);
     const hidden = () => {
       if (document.hidden) {
         engine.pause('The ride paused while this tab was hidden.');
-        void persist();
+        void stopControl().then(persist);
         setState({ ...engine.state });
       }
     };
@@ -69,13 +90,14 @@ export default function Ride({
       if (e.code === 'Escape' || e.code === 'Space') {
         e.preventDefault();
         engine.pause('Stopped by keyboard. Resume deliberately when ready.');
-        void persist();
+        void stopControl().then(persist);
         setState({ ...engine.state });
       }
     };
     const leaving = (e: BeforeUnloadEvent) => {
       if (engine.state.phase !== 'finished') {
         engine.pause('Page closed or refreshed');
+        void stopControl().then(persist);
         e.preventDefault();
         e.returnValue = '';
       }
@@ -85,6 +107,7 @@ export default function Ride({
     window.addEventListener('beforeunload', leaving);
     return () => {
       clearInterval(timer);
+      void stopControl();
       document.removeEventListener('visibilitychange', hidden);
       window.removeEventListener('keydown', keys);
       window.removeEventListener('beforeunload', leaving);
@@ -97,10 +120,12 @@ export default function Ride({
   const pause = () => {
     engine.pause();
     setState({ ...engine.state });
-    void persist();
+    void stopControl().then(persist);
   };
   const resume = () => {
+    if (controlled && control.current && !control.current.ended) return;
     engine.resume();
+    if (controlled && sceneReady) arm();
     setState({ ...engine.state });
   };
   const finish = () => {
@@ -126,7 +151,9 @@ export default function Ride({
           <span className="eyebrow">
             {engine.session.source === 'demo'
               ? 'DEMO RIDE · SIMULATED DATA'
-              : 'LIVE POWER · RESISTANCE NOT CONTROLLED'}
+              : controlled
+                ? 'LIVE POWER · AUTOMATIC SIM TERRAIN'
+                : 'LIVE POWER · RESISTANCE NOT CONTROLLED'}
           </span>
           <h2>{engine.session.workout.name}</h2>
         </div>
@@ -185,10 +212,29 @@ export default function Ride({
       <div className="ride-route">
         <MountainBadge />
         <strong>{route?.name ?? 'Oaxaca foothills'}</strong>
-        <span>{route ? 'SIM terrain preview · resistance unchanged' : 'ERG workout preview'}</span>
+        <span>
+          {route
+            ? controlled
+              ? 'SIM terrain · physical gears'
+              : 'SIM terrain preview · resistance unchanged'
+            : 'ERG workout preview'}
+        </span>
         <div>
           <b>{state.grade.toFixed(1)}%</b> visual grade
         </div>
+        {controlled && (
+          <div aria-label="Trainer control status">
+            <b>{control.current?.snapshot?.grade?.toFixed(2) ?? '—'}%</b> last acknowledged trainer
+            slope
+            <p>
+              {control.current?.ending
+                ? 'Stopping trainer…'
+                : control.current?.ready
+                  ? 'Terrain control active'
+                  : (control.current?.message ?? 'Waiting for road preparation')}
+            </p>
+          </div>
+        )}
         {route && (
           <div className="coasting-state" aria-label="Motion status">
             <strong>
@@ -345,7 +391,7 @@ export default function Ride({
             onClick={() => {
               engine.pause('Stop requested. The simulator is paused.');
               setState({ ...engine.state });
-              void persist();
+              void stopControl().then(persist);
             }}
           >
             <Square size={14} fill="currentColor" /> Stop
@@ -362,12 +408,18 @@ export default function Ride({
               : 'PREPARING THE ROAD'}
           </span>
           <strong className="countdown-number">
-            {sceneReady ? Math.ceil(state.countdown) : '…'}
+            {sceneReady && (!controlled || control.current?.ready)
+              ? Math.ceil(state.countdown)
+              : '…'}
           </strong>
           <p>
-            {engine.session.source === 'demo'
-              ? 'Demo rider starting. No trainer commands.'
-              : 'Start pedaling. Trainer resistance is unchanged.'}
+            {controlled
+              ? control.current?.ready
+                ? 'Flat SIM is active. Shift to a comfortable gear; terrain follows after the countdown.'
+                : (control.current?.message ?? 'Preparing trainer. The ride clock is waiting.')
+              : engine.session.source === 'demo'
+                ? 'Demo rider starting. No trainer commands.'
+                : 'Start pedaling. Trainer resistance is unchanged.'}
           </p>
           <button className="secondary" onClick={pause}>
             Cancel countdown
@@ -381,9 +433,17 @@ export default function Ride({
             <h1>Ride paused.</h1>
             <p>{state.reason}</p>
             {engine.session.source === 'bluetooth' && (
-              <p>BikeSIM is reading only. It has not changed trainer resistance.</p>
+              <p>
+                {controlled
+                  ? `${control.current?.ending ? 'Stopping trainer…' : (control.current?.message ?? '')} Stop may restore a heavier load. Resume deliberately when comfortable; it will start with flat SIM.`
+                  : 'BikeSIM is reading only. It has not changed trainer resistance.'}
+              </p>
             )}
-            <button className="primary" onClick={resume}>
+            <button
+              className="primary"
+              onClick={resume}
+              disabled={controlled && !!control.current && !control.current.ended}
+            >
               <Play size={18} /> Resume ride <ChevronRight size={18} />
             </button>
             <button className="secondary full" onClick={finish}>

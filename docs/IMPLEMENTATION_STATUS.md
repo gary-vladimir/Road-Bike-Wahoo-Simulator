@@ -1,5 +1,19 @@
 # Implementation status and decisions
 
+## September 12 — bounded automatic SIM road integration
+
+The opt-in control build now offers **KICKR · automatic SIM terrain** on Ride. Valley warm-up stays within the already tested slope range. Steeper routes remain previews; the app rejects unsupported control routes rather than clamping physical slope while showing a different hill. The shared SIM adapter retains ±1% authorization, quarter-percentage-point ramps, fresh-power guards, exclusive browser ownership, and acknowledged command serialization. No ERG targets are sent.
+
+Startup waits for controller readiness before the countdown advances. Pause/Stop, visibility loss, and control faults end control; pending preparation is cancellable. Resume deliberately creates a fresh session after shutdown completes. Finish waits for shutdown and saving before opening the summary. Zero-watt/zero-cadence telemetry remains valid for coasting. Saved sessions identify SIM control and include acknowledged slope/state changes and stop outcomes in their events; FIT remains a manual activity export.
+
+The rider's next check is a complete controlled Valley warm-up ride, including pause/resume, coasting/re-engagement, Stop behavior and manual FIT import. SIM slope response is already confirmed; complete lifecycle behavior is not. ERG tracking remains unresolved and does not block this SIM check. The default build still disables all trainer control.
+
+Verification: 87 unit tests pass. All 21 browser workflows passed across the suite and targeted reruns. The first suite found an outdated preview-copy assertion and one demo timing-watchdog pause while builds ran concurrently; the assertion was updated and the isolated rerun passed without relaxing the watchdog. Default and opt-in production builds, formatting, and whitespace checks pass. The existing large Three.js bundle warning remains. Visual inspection confirmed the controlled-ride HUD. These checks used synthetic hardware only. The ERG table now says “Power/Cadence after 10 s” instead of implying that its averaging window proves settling.
+
+## September 11 — physical SIM response confirmed
+
+The rider completed BikeSIM's manual SIM slope check and reports clear, realistic resistance changes. This clears the slope-response prerequisite for implementing full route control; restart/fault behavior and complete controlled rides still need verification. ERG remains separate: the latest capture shows acknowledged commands, repeated near-target power mixed with lower readings, and another cadence-zero-triggered Stop. See the current [hardware findings](HARDWARE_TESTS.md). Repeating ERG is not required before progressing with SIM riding. Historical “SIM response pending” statements below are superseded by this observation.
+
 ## September 11 — manual Strava export delivered
 
 Completed/stopped and recovered saved rides now expose **Download FIT for Strava** on the summary, including through history. The file is generated locally using Garmin's official FIT SDK; the rider manually imports it through Strava's file-upload page. No account integration or automatic upload is needed. Files preserve power/cadence, virtual speed/distance, and new per-record UTC timestamps/timer events so pauses are excluded from active duration. Older rides use their recorded active timeline with a visible limitation; demo data is explicitly labeled. See [export details](STRAVA_EXPORT.md). This supersedes the historical FIT deferral below.

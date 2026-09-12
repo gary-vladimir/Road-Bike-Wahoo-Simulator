@@ -128,7 +128,7 @@ export default function App() {
       setError((e as Error).message);
     }
   };
-  const startRoad = (route: Route, source: Source) => {
+  const startRoad = (route: Route, source: Source, controlled = false) => {
     setError('');
     try {
       if (
@@ -138,9 +138,11 @@ export default function App() {
           performance.now() - device.telemetry.powerAt > 3000)
       )
         throw new Error('Pair your KICKR in Trainer and confirm fresh power before starting.');
+      if (controlled) trainer.getPilotDevice('sim');
       setEngine(
         new RideEngine(routeWorkout(route), source, settings.ftp, settings.mass, {
           route,
+          trainerControl: controlled ? 'sim' : undefined,
           bikeMass: settings.bikeMass ?? 9,
           wheel: settings.wheel,
         }),

@@ -38,7 +38,7 @@ async function acquireLock(): Promise<() => void> {
       .catch(reject);
   });
 }
-/** Explicit manual diagnostic only. Never created by pairing or ordinary ride startup. */
+/** Explicitly armed control for diagnostics or bounded SIM roads. Pairing never arms it. */
 export class ErgPilot {
   private timer?: ReturnType<typeof setInterval>;
   private target = 50;

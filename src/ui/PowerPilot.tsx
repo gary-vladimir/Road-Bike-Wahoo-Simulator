@@ -343,14 +343,15 @@ export default function PowerPilot({ settings, registerStop, onActiveChange }: P
         <div className="pilot-table-wrap">
           <table className="pilot-table">
             <caption>
-              Target response · averages exclude the first 10 seconds and stale or repeated packets
+              Target response · averages exclude the first 10 seconds and stale or repeated packets.
+              This time window does not prove that power or cadence has stabilized.
             </caption>
             <thead>
               <tr>
                 <th>Target</th>
                 <th>Observed</th>
-                <th>Settled power</th>
-                <th>Settled cadence</th>
+                <th>Power after 10 s</th>
+                <th>Cadence after 10 s</th>
                 <th>Samples</th>
               </tr>
             </thead>

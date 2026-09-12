@@ -1,6 +1,6 @@
 # BikeSIM
 
-A local, single-rider cycling simulator for the existing road bike and KICKR CORE 2. SIM road riding is the default experience, with four procedural Oaxaca-inspired routes, free pacing, elevation profiles, and coasting physics. ERG power workouts have their own library with eight presets and an editor. Demo and read-only Bluetooth rides save locally. Automatic terrain resistance is not enabled yet; a separate manual SIM test is ready for hardware validation.
+A local, single-rider cycling simulator for the existing road bike and KICKR CORE 2. SIM road riding is the default experience, with four procedural Oaxaca-inspired routes, free pacing, elevation profiles, and coasting physics. ERG power workouts have their own library with eight presets and an editor. Rides save locally and export FIT activities for manual Strava upload. The opt-in control build supports automatic SIM terrain on Valley warm-up; the default build supports demo and read-only Bluetooth riding.
 
 ## Run locally — Docker only
 
@@ -50,7 +50,9 @@ After pairing, choose **KICKR · live power, read-only** on Ride to explore the 
 
 Live power workouts still require your known FTP. Their targets are guidance. Virtual speed is estimated from power, rider/bike mass, and grade; trainer-reported speed is shown only in diagnostics. Fresh power is required; losing it pauses either kind of ride.
 
-The SIM controller is connected to Bluetooth only through the separate, manually armed ±1% diagnostic pilot. Automatic ERG/SIM ride control and Wi-Fi transport remain unavailable. See [hardware validation](docs/HARDWARE_TESTS.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+In the opt-in control build below, **Ride → Valley warm-up → KICKR · automatic SIM terrain** connects the tested SIM controller to route distance. Confirm readiness and matching Wahoo profile, then select **Start SIM road ride**. Startup applies flat SIM before the countdown; after that, slope follows terrain while you shift naturally. The HUD distinguishes visual grade from the last acknowledged trainer slope. Pause, Stop, keyboard Stop, lost visibility, and telemetry/control faults end control. Resume explicitly starts a fresh control session; Finish waits for shutdown before opening the saved summary. Session JSON includes acknowledged slope transitions and control outcomes in its events.
+
+Controlled roads must remain inside the tested −1% to +1% range; other routes are available as previews, without silently reducing their physical slopes. The full physical ride lifecycle still needs the rider's check. Automatic ERG workout control and Wi-Fi transport remain unavailable. See [hardware validation](docs/HARDWARE_TESTS.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Supervised SIM and ERG pilots
 
@@ -60,7 +62,7 @@ A separate diagnostic panel supports HT-2 and HT-3 hardware validation. Stop the
 docker compose -f .devcontainer/compose.yaml exec -e VITE_TRAINER_CONTROL=pilot bikesim npm run dev
 ```
 
-Reload Chrome and open **Trainer**. Pairing remains read-only. For the next physical check, select **SIM · terrain test**. End Wahoo's control session and confirm its rider/tire profile matches BikeSIM; the FTMS SIM payload does not transmit those profile values. Confirm a comfortable baseline and readiness, then **Start flat SIM test**. Select slopes from −1% through +1%; changes are limited to 0.25 percentage points per second. Fresh zero watts and zero cadence remain valid. Use physical gears naturally. No ERG power command is sent in SIM.
+Reload Chrome while control is stopped and open **Trainer**. Pairing remains read-only. The **SIM · terrain test** remains available for isolated slope checks; the rider already confirmed its slope response. End Wahoo's control session and confirm its rider/tire profile matches BikeSIM; the FTMS SIM payload does not transmit those profile values. Confirm a comfortable baseline and readiness, then **Start flat SIM test**. Select slopes from −1% through +1%; changes are limited to 0.25 percentage points per second. Fresh zero watts and zero cadence remain valid. Use physical gears naturally. No ERG power command is sent in SIM.
 
 The separate **ERG · power test** retains the 50–100 W diagnostic. Select readiness and **Start 50 W test**; it waits without resistance commands until fresh power/cadence and at least 50 rpm arrive. Target changes are limited to 10 W per second. ERG's low-cadence cutoff does not apply to SIM.
 
@@ -68,7 +70,7 @@ Both tests have explicit Stop, visibility/freshness/timing checks, exclusive bro
 
 A full page refresh ends the browser's GATT session. BikeSIM attempts to restore **telemetry only** using the previously selected device and Chrome's `getDevices()` permission API. No control session or readiness is restored. If that API or saved permission is unavailable, use **Pair KICKR via Bluetooth**. The current Mac Chrome configuration did not restore its saved permission in the September 7 check, so seamless reconnection is not verified on this machine. **Reconnect KICKR** reuses the selected device within the current page without reopening the chooser. An intentional Disconnect disables refresh restoration for that tab. See [Chrome's saved-device sample](https://googlechrome.github.io/samples/web-bluetooth/get-devices.html) and [implementation status](https://github.com/WebBluetoothCG/web-bluetooth/blob/main/implementation-status.md).
 
-Hot replacement is disabled in pilot mode so edits cannot replace an active controller. Reload only after stopping the test. The Compose default remains `off`; automatic workout resistance is still unavailable. Export the separate control test log from the test panel.
+Hot replacement is disabled in pilot mode so edits cannot replace an active controller. Reload only after stopping the test or ride. The Compose default remains `off`; automatic ERG workout resistance is still unavailable. Export the separate control test log from the test panel.
 
 The **Check ERG target response** panel shows selected, acknowledged, and measured watts separately, alongside cadence and time at target. Hold a target for twenty seconds after acknowledgement if comfortable; the table excludes the first ten seconds and repeated/stale packets from its averages. The current rider observation is that test termination brings back a heavier load: **Stop ends the test but is not an unload command**. See the September 9 HT-2 record before another test.
 

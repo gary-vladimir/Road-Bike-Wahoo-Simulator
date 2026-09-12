@@ -7,6 +7,7 @@ import type { Workout } from '../workouts/model';
 import RoadScene from '../scene/RoadScene';
 import TerrainProfile from './TerrainProfile';
 import { stockWheel, wheelLabel } from '../ride/bike';
+import { supportsRoadControl } from '../ride/road-control';
 export function routeWorkout(route: Route): Workout {
   const block = {
     name: 'Your own pace',
@@ -32,10 +33,13 @@ export default function RoadSetup({
 }: {
   settings: Settings;
   loaded: boolean;
-  onStart: (route: Route, source: Source) => void;
+  onStart: (route: Route, source: Source, controlled?: boolean) => void;
 }) {
   const [route, setRoute] = useState(routes[0]),
-    [source, setSource] = useState<Source>('demo');
+    [source, setSource] = useState<Source | 'controlled'>('demo');
+  const [ready, setReady] = useState(false);
+  const controlled = source === 'controlled';
+  const supported = supportsRoadControl(route);
   const length = routeLength(route),
     finish = routePosition(route, length);
   return (
@@ -46,7 +50,7 @@ export default function RoadSetup({
           <h1>Ride at your own pace.</h1>
           <p>Choose a road. Find your rhythm. Shift as the terrain changes.</p>
         </div>
-        <span className="pill">Terrain preview</span>
+        <span className="pill">SIM roads</span>
       </div>
       <section className="feature">
         <div className="feature-copy">
@@ -117,23 +121,62 @@ export default function RoadSetup({
           </div>
           <label className="source-label">
             Ride source
-            <select value={source} onChange={(e) => setSource(e.target.value as Source)}>
+            <select
+              value={source}
+              onChange={(e) => {
+                setSource(e.target.value as Source | 'controlled');
+                setReady(false);
+              }}
+            >
               <option value="demo">Demo · adjustable effort</option>
               <option value="bluetooth">KICKR · live power, read-only</option>
+              {import.meta.env.VITE_TRAINER_CONTROL === 'pilot' && (
+                <option value="controlled">KICKR · automatic SIM terrain</option>
+              )}
             </select>
           </label>
           <p className="start-note">
-            {source === 'demo'
-              ? 'Explore terrain physics with a simulated rider. Adjust watts or coast during the ride.'
-              : 'Your power moves the scene. FTP is not required. Existing trainer resistance remains unchanged.'}
+            {controlled
+              ? 'BikeSIM controls slope while you shift naturally. Startup applies flat SIM before the countdown. Stop ends control; it may restore a heavier previous load.'
+              : source === 'demo'
+                ? 'Explore terrain physics with a simulated rider. Adjust watts or coast during the ride.'
+                : 'Your power moves the scene. FTP is not required. Existing trainer resistance remains unchanged.'}
           </p>
-          <button className="primary" disabled={!loaded} onClick={() => onStart(route, source)}>
+          {controlled && (
+            <>
+              {!supported && (
+                <p role="alert">
+                  This route exceeds the tested −1% to +1% range. Choose Valley warm-up for trainer
+                  control, or use a preview source.
+                </p>
+              )}
+              <label className="source-label">
+                <input
+                  type="checkbox"
+                  checked={ready}
+                  onChange={(e) => setReady(e.target.checked)}
+                />
+                I’m ready for a SIM road ride: the current load is comfortable, other trainer apps
+                are closed, and Wahoo’s rider weight and wheel size match my BikeSIM settings.
+              </label>
+            </>
+          )}
+          <button
+            className="primary"
+            disabled={!loaded || (controlled && (!ready || !supported))}
+            onClick={() => onStart(route, controlled ? 'bluetooth' : source, controlled)}
+          >
             <Play size={17} />
-            {source === 'demo' ? 'Start road demo' : 'Start live road preview'}
+            {controlled
+              ? 'Start SIM road ride'
+              : source === 'demo'
+                ? 'Start road demo'
+                : 'Start live road preview'}
           </button>
           <p className="fine-print">
-            Automatic terrain resistance is awaiting hardware validation. This preview sends no
-            trainer commands.
+            {controlled
+              ? 'Valley warm-up uses the tested slope range. The complete ride lifecycle still needs a physical check. Fresh zero-watt telemetry permits coasting.'
+              : 'Demo and live previews send no trainer commands.'}
           </p>
           <p className="fine-print">
             Speed estimate: {settings.mass} kg rider + {settings.bikeMass ?? 9} kg bike. Edit weight

@@ -33,11 +33,11 @@ Circumference converts virtual speed to virtual wheel RPM. It does not multiply 
 
 ## Physical resistance boundary
 
-The separately armed SIM pilot sends slope, still-air wind, rolling coefficient 0.004, and wind coefficient 0.18, limited to ±1% and 0.25 percentage-point changes per second. Flat startup is road load, not unloading. SIM does not prescribe watts or require pedaling during coasting.
+The explicitly armed SIM controller sends slope, still-air wind, rolling coefficient 0.004, and wind coefficient 0.18, limited to ±1% and 0.25 percentage-point changes per second. It powers both the manual diagnostic and automatic Valley warm-up riding in the opt-in build. Flat startup is road load, not unloading. SIM does not prescribe watts or require pedaling during coasting.
 
-FTMS simulation parameters contain no rider-mass or wheel-size field ([Bluetooth SIG test specification](https://files.bluetooth.com/wp-content/uploads/dlm_uploads/2024/10/FTMS.TS_.p6.pdf)). BikeSIM Settings does not rewrite Wahoo's trainer profile. Before the pilot, the rider verifies that profile and ends Wahoo control. Exported setup values record confirmed app settings, not trainer profile readback. Cross-app profile persistence and BikeSIM's physical SIM response still need [HT-3](HARDWARE_TESTS.md); Wahoo's successful test alone does not establish them.
+FTMS simulation parameters contain no rider-mass or wheel-size field ([Bluetooth SIG test specification](https://files.bluetooth.com/wp-content/uploads/dlm_uploads/2024/10/FTMS.TS_.p6.pdf)). BikeSIM Settings does not rewrite Wahoo's trainer profile. Before control starts, the rider verifies that profile and ends Wahoo control. Exported setup values record confirmed app settings, not trainer profile readback. The rider confirmed BikeSIM's physical slope response on September 11. Cross-app profile persistence and the complete controlled ride lifecycle remain [hardware checks](HARDWARE_TESTS.md).
 
-Ordinary road rides remain demo or read-only live power. Virtual downhill motion can continue while the physical flywheel slows; gravity in the game does not promise to motor-drive a trainer. Full route resistance follows physical verification of the manual pilot.
+The opt-in build supports controlled roads whose full profile stays within ±1%; steeper routes remain demo/read-only previews, without clamping physical grade to a different hill. The controller follows the same distance-based grade as the physics engine; the HUD exposes the last acknowledged slope because rate limiting and acknowledgement delays can temporarily lag the route. Startup/resume applies flat SIM before the countdown. Virtual downhill motion can continue while the physical flywheel slows; gravity in the game does not promise to motor-drive a trainer.
 
 ## Verification
 

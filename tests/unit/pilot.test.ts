@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErgPilot, type PilotSnapshot } from '../../src/trainer/pilot';
+import { RoadControl, supportsRoadControl } from '../../src/ride/road-control';
+import { RideEngine } from '../../src/ride/engine';
+import { routes } from '../../src/ride/terrain';
+import { presets } from '../../src/workouts/model';
 
 function fixture() {
   const document = Object.assign(new EventTarget(), { hidden: false });
@@ -118,6 +122,177 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+describe('controlled road lifecycle with synthetic GATT', () => {
+  function road() {
+    const f = fixture();
+    const engine = new RideEngine(presets[0], 'bluetooth', null, 70, {
+      route: routes[0],
+      trainerControl: 'sim',
+    });
+    const control = new RoadControl(
+      engine,
+      (changed) => ErgPilot.prepare(f.source, changed, 'sim'),
+      () => {},
+    );
+    return { ...f, engine, control };
+  }
+  it('rejects steeper routes instead of silently clamping terrain', () => {
+    expect(routes.map(supportsRoadControl)).toEqual([true, false, false, false]);
+    expect(
+      () =>
+        new RideEngine(presets[0], 'bluetooth', null, 70, {
+          route: routes[1],
+          trainerControl: 'sim',
+        }),
+    ).toThrow('range');
+    expect(
+      () =>
+        new RideEngine(presets[0], 'demo', null, 70, { route: routes[0], trainerControl: 'sim' }),
+    ).toThrow('range');
+  });
+  it('follows distance through climbs and descents with zero watts allowed and no ERG writes', async () => {
+    const f = road();
+    f.coast();
+    await f.control.start();
+    expect(f.control.ready).toBe(true);
+    expect(f.engine.state.elapsed).toBe(0);
+    f.engine.state.phase = 'running';
+    f.engine.state.distance = 1;
+    f.control.update();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(f.control.snapshot?.grade).toBe(1);
+    f.engine.state.distance = 2.4;
+    f.control.update();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(f.control.snapshot?.grade).toBe(-0.5);
+    expect(f.writes.every((w) => w[0] !== 5)).toBe(true);
+    expect(f.engine.state.phase).toBe('running');
+    await f.control.stop();
+    expect(f.writes.at(-1)).toEqual([8, 1]);
+    expect(f.engine.session.events.some((event) => event.message.includes('-0.5%'))).toBe(true);
+  });
+  it('cancels asynchronous preparation without a late Start', async () => {
+    const f = road();
+    let release!: () => void;
+    f.status.startNotifications.mockImplementationOnce(async () => {
+      await new Promise<void>((done) => {
+        release = done;
+      });
+      return f.status;
+    });
+    const starting = f.control.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const stopped = f.control.stop();
+    expect(f.control.ending).toBe(true);
+    expect(f.control.ended).toBe(false);
+    release();
+    await Promise.all([starting, stopped]);
+    expect(f.control.ended).toBe(true);
+    expect(f.control.ready).toBe(false);
+    expect(f.writes).toEqual([]);
+    await f.control.start();
+    expect(f.writes).toEqual([]);
+  });
+  it('waits for Stop acknowledgement before allowing a fresh resume controller', async () => {
+    const f = road();
+    await f.control.start();
+    f.delayStop();
+    f.engine.pause();
+    f.control.update();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.control.ending).toBe(true);
+    expect(f.control.ended).toBe(false);
+    expect(f.control.ready).toBe(false);
+    f.ack(8);
+    await f.control.stop();
+    expect(f.control.ended).toBe(true);
+    const resumed = new RoadControl(
+      f.engine,
+      (changed) => ErgPilot.prepare(f.source, changed, 'sim'),
+      () => {},
+    );
+    f.engine.resume();
+    await resumed.start();
+    expect(resumed.ready).toBe(true);
+    expect(f.writes.slice(-3)).toEqual([[0], [17, 0, 0, 0, 0, 40, 18], [7]]);
+    const ending = resumed.stop();
+    await vi.advanceTimersByTimeAsync(0);
+    f.ack(8);
+    await ending;
+  });
+  it('pauses on stale telemetry and never automatically resumes when readings recover', async () => {
+    const f = road();
+    await f.control.start();
+    f.engine.state.phase = 'running';
+    f.expire();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(f.engine.state.phase).toBe('paused');
+    expect(f.control.ready).toBe(false);
+    expect(f.writes.at(-1)).toEqual([8, 1]);
+    f.pedal();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(f.writes.filter((w) => w[0] === 7)).toHaveLength(1);
+    await f.control.stop();
+  });
+  it('contains preparation failures and can finish a cancelled ride', async () => {
+    const f = road();
+    const control = new RoadControl(
+      f.engine,
+      async () => {
+        throw new Error('Connection lost');
+      },
+      () => {},
+    );
+    await control.start();
+    await control.stop();
+    expect(control.ended).toBe(true);
+    expect(f.engine.state.phase).toBe('paused');
+    expect(control.message).toContain('Connection lost');
+    f.engine.finish();
+    control.update();
+    expect(f.engine.session.status).toBe('stopped');
+    expect(f.writes).toEqual([]);
+  });
+  it('waits for pending startup even if the adapter unexpectedly rejects Stop', async () => {
+    const f = road();
+    let finishStart!: () => void;
+    const control = new RoadControl(
+      f.engine,
+      async () => ({
+        start: () =>
+          new Promise<void>((resolve) => {
+            finishStart = resolve;
+          }),
+        stop: async () => {
+          throw new Error('Transport failure');
+        },
+        setGrade: () => {},
+      }),
+      () => {},
+    );
+    void control.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const stopping = control.stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(control.ended).toBe(false);
+    finishStart();
+    await stopping;
+    expect(control.ended).toBe(true);
+    expect(control.message).toContain('Physical load is unknown');
+  });
+  it('reports an unacknowledged Stop and disconnects without retrying or claiming unloading', async () => {
+    const f = road();
+    await f.control.start();
+    f.delayStop();
+    const stopping = f.control.stop();
+    await vi.advanceTimersByTimeAsync(3000);
+    await stopping;
+    expect(f.control.ended).toBe(true);
+    expect(f.control.message).toContain('unknown');
+    expect(f.disconnect).toHaveBeenCalledTimes(1);
+    expect(f.writes.filter((w) => w[0] === 8)).toHaveLength(1);
+  });
 });
 describe('supervised pilot lifecycle with synthetic GATT only', () => {
   it('starts SIM at zero watts/cadence, ramps signed slopes, and preserves telemetry after Stop', async () => {

@@ -17,16 +17,20 @@ export function Summary({ session, onBack }: { session: Session; onBack: () => v
       <div className="eyebrow">
         {session.source === 'demo'
           ? 'DEMO SESSION · SIMULATED DATA'
-          : 'LIVE POWER SESSION · READ-ONLY'}
+          : session.trainerControl === 'sim'
+            ? 'LIVE POWER SESSION · AUTOMATIC SIM TERRAIN'
+            : 'LIVE POWER SESSION · READ-ONLY'}
       </div>
       <h1>{session.status === 'completed' ? 'A ride well spent.' : 'Your ride, recorded.'}</h1>
       <p>
         {session.workout.name} · {new Date(session.startedAt).toLocaleString()} · {session.status}
       </p>
       <p>
-        {session.route
-          ? 'SIM terrain preview · free pacing · no resistance commands'
-          : 'ERG workout preview · guided power targets'}
+        {session.trainerControl === 'sim'
+          ? 'SIM terrain control · physical gears · free pacing'
+          : session.route
+            ? 'SIM terrain preview · free pacing · no resistance commands'
+            : 'ERG workout preview · guided power targets'}
       </p>
       <div className="summary-stats">
         <div>

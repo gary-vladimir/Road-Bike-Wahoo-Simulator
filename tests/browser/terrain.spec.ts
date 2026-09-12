@@ -8,8 +8,8 @@ test('SIM is the default, routes have elevation profiles, and ERG workouts remai
   await page.getByRole('button', { name: /Rolling foothills Six kilometers/ }).click();
   await expect(page.locator('.workout-detail h2')).toHaveText('Rolling foothills');
   await expect(
-    page.getByText('Automatic terrain resistance is awaiting hardware validation.', {
-      exact: false,
+    page.getByText('Demo and live previews send no trainer commands.', {
+      exact: true,
     }),
   ).toBeVisible();
   await page.screenshot({ path: 'test-results/terrain-desktop.png', fullPage: true });

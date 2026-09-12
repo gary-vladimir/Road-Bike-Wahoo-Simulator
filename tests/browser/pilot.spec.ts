@@ -30,6 +30,15 @@ test.beforeEach(async ({ page }) => {
       writeValueWithResponse: async (bytes: ArrayBuffer) => {
         const command = Array.from(new Uint8Array(bytes));
         writes.push(command);
+        if (command[0] === 8 && (window as unknown as { mockHoldStop: boolean }).mockHoldStop) {
+          Object.assign(window, {
+            mockAcknowledgeStop: () => {
+              point.value = new DataView(Uint8Array.of(0x80, 8, 1).buffer);
+              point.dispatchEvent(new Event('characteristicvaluechanged'));
+            },
+          });
+          return;
+        }
         point.value = new DataView(Uint8Array.of(0x80, command[0], 1).buffer);
         point.dispatchEvent(new Event('characteristicvaluechanged'));
       },
@@ -87,6 +96,81 @@ test.beforeEach(async ({ page }) => {
       },
     });
   });
+});
+async function openControlledRoad(page: import('@playwright/test').Page) {
+  await page.setViewportSize({ width: 1000, height: 850 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Graphics quality').selectOption('low');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await page.getByRole('button', { name: 'Trainer', exact: true }).click();
+  await page.getByRole('button', { name: 'Pair KICKR via Bluetooth' }).click();
+  await expect(page.getByText('Live power received', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Ride', exact: true }).click();
+  await page.getByLabel('Ride source').selectOption('controlled');
+}
+const roadWrites = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites);
+test('controlled road requires readiness, supports coasting, resumes explicitly and finishes after Stop', async ({
+  page,
+}) => {
+  await openControlledRoad(page);
+  const start = page.getByRole('button', { name: 'Start SIM road ride', exact: true });
+  await expect(start).toBeDisabled();
+  await page.getByRole('checkbox', { name: /I’m ready for a SIM road ride/ }).check();
+  await page.getByRole('button', { name: /Rolling foothills/ }).click();
+  await expect(start).toBeDisabled();
+  await expect(page.getByRole('alert')).toContainText('exceeds the tested');
+  expect(await roadWrites(page)).toEqual([]);
+  await page.getByRole('button', { name: /Valley warm-up/ }).click();
+  await start.click();
+  await expect(page.getByLabel('Trainer control status')).toContainText('Terrain control active');
+  await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 18000 });
+  await expect(page.locator('.ride-time')).toContainText('0:02');
+  await page.evaluate(() => Object.assign(window, { mockPower: 0, mockCadence: 0 }));
+  await expect(page.getByLabel('Motion status')).toContainText(/Coasting|Stopped · pedal to move/);
+  expect(await roadWrites(page)).toEqual([[0], [17, 0, 0, 0, 0, 40, 18], [7]]);
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Resume ride' })).toBeEnabled();
+  expect((await roadWrites(page)).at(-1)).toEqual([8, 1]);
+  await page.getByRole('button', { name: 'Resume ride' }).click();
+  await expect(page.getByLabel('Trainer control status')).toContainText('Terrain control active');
+  await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 8000 });
+  expect((await roadWrites(page)).slice(-3)).toEqual([[0], [17, 0, 0, 0, 0, 40, 18], [7]]);
+  await page.screenshot({ path: 'test-results/controlled-road.png' });
+  await page.evaluate(() => Object.assign(window, { mockHoldStop: true }));
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Resume ride' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Finish & save ride' }).click();
+  await expect(page.getByRole('heading', { name: 'Your ride, recorded.' })).not.toBeVisible();
+  await page.evaluate(() =>
+    (window as unknown as { mockAcknowledgeStop: () => void }).mockAcknowledgeStop(),
+  );
+  await expect(page.getByRole('heading', { name: 'Your ride, recorded.' })).toBeVisible();
+  await expect(
+    page.getByText('LIVE POWER SESSION · AUTOMATIC SIM TERRAIN', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download FIT for Strava' })).toBeEnabled();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download FIT for Strava' }).click();
+  expect((await download).suggestedFilename()).toMatch(/\.fit$/);
+  expect((await roadWrites(page)).filter((w) => w[0] === 5)).toEqual([]);
+  await page.reload();
+  expect(await roadWrites(page)).toEqual([]);
+});
+test('controlled road cancellation during preparation never sends a late Start', async ({
+  page,
+}) => {
+  await openControlledRoad(page);
+  await page.evaluate(() => Object.assign(window, { mockDelayPrepare: true }));
+  await page.getByRole('checkbox', { name: /I’m ready for a SIM road ride/ }).check();
+  await page.getByRole('button', { name: 'Start SIM road ride', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel countdown' }).click();
+  await expect(page.getByRole('heading', { name: 'Ride paused.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Finish & save ride' }).click();
+  await expect(page.getByRole('heading', { name: 'Your ride, recorded.' })).toBeVisible();
+  await page.waitForTimeout(1000);
+  expect(await roadWrites(page)).toEqual([]);
 });
 test('live SIM road preview runs without FTP and sends no resistance commands', async ({
   page,
