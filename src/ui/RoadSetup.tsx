@@ -4,7 +4,6 @@ import { routes, routeLength, routePosition, type Route } from '../ride/terrain'
 import type { Source } from '../ride/engine';
 import type { Settings } from '../storage/store';
 import type { Workout } from '../workouts/model';
-import RoadScene from '../scene/RoadScene';
 import TerrainProfile from './TerrainProfile';
 import { stockWheel, wheelLabel } from '../ride/bike';
 import { supportsRoadControl } from '../ride/road-control';
@@ -73,7 +72,12 @@ export default function RoadSetup({
           </div>
         </div>
         <div className="feature-scene">
-          <RoadScene speed={8} quality={settings.quality} />
+          <img
+            className="route-hero"
+            src={`/scenes/${route.id}.jpg`}
+            alt={`${route.name} simulation preview`}
+            fetchPriority="high"
+          />
           <span className="scene-tag">PROCEDURAL SCENERY · NOT A REAL OAXACA ROUTE</span>
         </div>
       </section>
@@ -90,6 +94,18 @@ export default function RoadSetup({
               aria-pressed={r.id === route.id}
               onClick={() => setRoute(r)}
             >
+              <div className="route-cover">
+                <img src={`/scenes/${r.id}.jpg`} alt="" loading="lazy" />
+                <span>
+                  {r.id === 'valley'
+                    ? 'GENTLE START'
+                    : r.id === 'descent'
+                      ? 'LET IT ROLL'
+                      : r.id === 'ascent'
+                        ? 'FIND YOUR CLIMB'
+                        : 'ROLLING COUNTRY'}
+                </span>
+              </div>
               <div className="eyebrow">
                 {(routeLength(r) / 1000).toFixed(1)} KM · PROCEDURAL ROAD
               </div>

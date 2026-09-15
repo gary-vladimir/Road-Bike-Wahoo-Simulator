@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronRight, Maximize, Minus, Pause, Play, Plus, Square } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronRight,
+  Maximize,
+  Minus,
+  Pause,
+  Play,
+  Plus,
+  Square,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 import RoadScene from '../scene/RoadScene';
 import Profile from './Profile';
 import { clock, position, totalSeconds } from '../workouts/model';
@@ -26,6 +37,7 @@ export default function Ride({
   const [savedAt, setSavedAt] = useState(false);
   const [fullscreenError, setFullscreenError] = useState('');
   const [sceneReady, setSceneReady] = useState(false);
+  const [immersive, setImmersive] = useState(false);
   const onSceneReady = useCallback(() => setSceneReady(true), []);
   const container = useRef<HTMLDivElement>(null);
   const queue = useRef(Promise.resolve());
@@ -133,12 +145,19 @@ export default function Ride({
     setState({ ...engine.state });
   };
   return (
-    <div className="ride-screen" data-quality={quality} ref={container}>
+    <div
+      className="ride-screen"
+      data-quality={quality}
+      data-mode={engine.session.route ? 'sim' : 'erg'}
+      data-immersive={immersive}
+      ref={container}
+    >
       <div className="ride-world">
         <RoadScene
           speed={state.speed}
           distance={state.distance * 1000}
           grade={state.grade}
+          route={engine.session.route}
           quality={quality}
           onReady={onSceneReady}
         />
@@ -157,20 +176,31 @@ export default function Ride({
           </span>
           <h2>{engine.session.workout.name}</h2>
         </div>
-        <button
-          className="glass-button icon-only"
-          aria-label="Toggle fullscreen"
-          onClick={() => {
-            const request = document.fullscreenElement
-              ? document.exitFullscreen()
-              : container.current?.requestFullscreen();
-            void request?.catch(() =>
-              setFullscreenError('Fullscreen is unavailable in this browser.'),
-            );
-          }}
-        >
-          <Maximize size={19} />
-        </button>
+        <div className="view-controls">
+          <button
+            className="glass-button icon-only"
+            aria-label={immersive ? 'Show ride details' : 'Focus on the road'}
+            aria-pressed={immersive}
+            onClick={() => setImmersive(!immersive)}
+            title={immersive ? 'Show ride details' : 'Focus on the road'}
+          >
+            {immersive ? <Eye size={19} /> : <EyeOff size={19} />}
+          </button>
+          <button
+            className="glass-button icon-only"
+            aria-label="Toggle fullscreen"
+            onClick={() => {
+              const request = document.fullscreenElement
+                ? document.exitFullscreen()
+                : container.current?.requestFullscreen();
+              void request?.catch(() =>
+                setFullscreenError('Fullscreen is unavailable in this browser.'),
+              );
+            }}
+          >
+            <Maximize size={19} />
+          </button>
+        </div>
       </div>
       <div className="ride-metrics">
         <div className="power-metric">

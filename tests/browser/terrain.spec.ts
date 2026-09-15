@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForInitialRide } from '../helpers/ride-ready';
 test('SIM is the default, routes have elevation profiles, and ERG workouts remain separate', async ({
   page,
 }) => {
@@ -27,7 +28,7 @@ test('free road demo has effort/coasting controls, no FTP target, and saves SIM 
   await page.getByRole('button', { name: 'Save settings' }).click();
   await page.getByRole('button', { name: 'Ride', exact: true }).click();
   await page.getByRole('button', { name: 'Start road demo', exact: true }).click();
-  await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 18000 });
+  await waitForInitialRide(page);
   await expect(page.getByText('Your effort · no watt target', { exact: true })).toBeVisible();
   await expect(page.getByText('Your cadence · shift freely', { exact: true })).toBeVisible();
   const slider = page.getByRole('slider', { name: 'Demo effort watts' });
@@ -75,7 +76,7 @@ test('confirmed profile is editable and the downhill demo coasts at zero watts',
   await page.getByRole('button', { name: 'Ride', exact: true }).click();
   await page.getByRole('button', { name: /Descent to the valley A 2 km downhill/ }).click();
   await page.getByRole('button', { name: 'Start road demo', exact: true }).click();
-  await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 18000 });
+  await waitForInitialRide(page);
   await page.getByRole('button', { name: 'Coast', exact: true }).click();
   await expect(page.getByLabel('Motion status')).toContainText('Coasting · 0 W');
   const distance = () => page.locator('.ride-metrics').innerText();

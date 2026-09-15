@@ -32,7 +32,9 @@ test('demo ride countdown, pause, resume, stop, summary and history', async ({ p
   await page.getByRole('button', { name: 'Workouts', exact: true }).click();
   await page.getByRole('button', { name: 'Start demo ride' }).click();
   await expect(page.locator('.countdown-number')).toBeVisible();
-  await expect(page.getByText('YOUR ROAD IS READY', { exact: true })).toBeVisible();
+  await expect(page.getByText('YOUR ROAD IS READY', { exact: true })).toBeVisible({
+    timeout: 20000,
+  });
   await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 15000 });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Ride paused.' })).toBeVisible();

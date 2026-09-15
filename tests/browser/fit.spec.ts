@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { Decoder, Stream } from '@garmin/fitsdk';
 import { exportSession } from '../fixtures/export-session';
 import { defaults } from '../../src/storage/store';
+import { waitForInitialRide } from '../helpers/ride-ready';
 
 async function readFit(download: Download) {
   const path = await download.path();
@@ -83,7 +84,7 @@ test('newly finished demo downloads an explicitly labeled FIT from its summary',
   await expect(page.getByRole('status')).toHaveText('Settings saved.');
   await page.getByRole('button', { name: 'Ride', exact: true }).click();
   await page.getByRole('button', { name: 'Start road demo' }).click();
-  await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 18000 });
+  await waitForInitialRide(page);
   // The HUD clock rounds upward; 00:03 establishes at least two recorded seconds.
   await expect(page.locator('.ride-time')).toContainText('00:03', { timeout: 6000 });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();

@@ -3,4 +3,6 @@ dist/
 test-results/
 playwright-report/
 .env
+token.txt
+.secrets/
 .DS_Store

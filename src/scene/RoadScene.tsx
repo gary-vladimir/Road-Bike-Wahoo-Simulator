@@ -1,53 +1,222 @@
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Component, type ReactNode, memo, useEffect, useMemo, useRef } from 'react';
+import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
+import { Component, type ReactNode, memo, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import Vegetation, { type TreePlacement } from './Vegetation';
+import type { Route } from '../ride/terrain';
+import {
+  agaveGeometry,
+  grassGeometry,
+  heading,
+  pavementTexture,
+  random,
+  ribbon,
+  roadPoint,
+  terrainGeometry,
+  terrainPoint,
+} from './landscape';
 
-const curve = (z: number) => 14 * Math.sin(z / 130) + 7 * Math.sin(z / 63);
-function Ribbon({
-  width,
-  offset = 0,
+type Placement = {
+  position: THREE.Vector3;
+  scale: [number, number, number];
+  rotation?: number;
+  color?: string;
+};
+function Instances({
+  geometry,
+  items,
   color,
-  layer = 1,
+  vertexColors = false,
 }: {
-  width: number;
-  offset?: number;
+  geometry: THREE.BufferGeometry;
+  items: Placement[];
   color: string;
-  layer?: number;
+  vertexColors?: boolean;
 }) {
-  const geometry = useMemo(() => {
-    const positions: number[] = [],
-      indices: number[] = [];
-    for (let i = 0; i <= 220; i++) {
-      const z = -25 + i * 3;
-      positions.push(
-        curve(z) + offset - width / 2,
-        layer * 0.025,
-        -z,
-        curve(z) + offset + width / 2,
-        layer * 0.025,
-        -z,
+  const invalidate = useThree((s) => s.invalidate);
+  const ref = useRef<THREE.InstancedMesh>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    const object = new THREE.Object3D();
+    items.forEach((p, i) => {
+      object.position.copy(p.position);
+      object.scale.set(...p.scale);
+      object.rotation.set(0, p.rotation ?? 0, 0);
+      object.updateMatrix();
+      ref.current!.setMatrixAt(i, object.matrix);
+      ref.current!.setColorAt(i, new THREE.Color(p.color ?? color));
+    });
+    ref.current.instanceMatrix.needsUpdate = true;
+    if (ref.current.instanceColor) ref.current.instanceColor.needsUpdate = true;
+    ref.current.computeBoundingSphere();
+    invalidate();
+  }, [items, color, invalidate]);
+  return (
+    <instancedMesh ref={ref} args={[geometry, undefined, items.length]}>
+      <meshStandardMaterial
+        color="white"
+        vertexColors={vertexColors}
+        roughness={1}
+        side={vertexColors ? THREE.DoubleSide : THREE.FrontSide}
+      />
+    </instancedMesh>
+  );
+}
+function Landscape({ start, route, low }: { start: number; route?: Route; low: boolean }) {
+  const length = 1440;
+  const [groundMap, treeMap] = useLoader(THREE.TextureLoader, [
+    '/assets/valley-ground.jpg',
+    '/assets/oaxaca-tree.webp',
+  ]);
+  useMemo(() => {
+    groundMap.wrapS = groundMap.wrapT = THREE.RepeatWrapping;
+    groundMap.colorSpace = THREE.SRGBColorSpace;
+    groundMap.anisotropy = 4;
+    treeMap.colorSpace = THREE.SRGBColorSpace;
+  }, [groundMap, treeMap]);
+  const geometries = useMemo(
+    () => ({
+      ground: terrainGeometry(start, length, route, low),
+      shoulder: ribbon(start, length, 9, route, 0.005),
+      road: ribbon(start, length, 7.2, route, 0.025),
+      rock: new THREE.IcosahedronGeometry(1, 0),
+      agave: agaveGeometry(),
+      grass: grassGeometry(),
+      post: new THREE.BoxGeometry(0.12, 1, 0.12),
+      rail: new THREE.BoxGeometry(1, 0.045, 0.045),
+    }),
+    [start, route, low],
+  );
+  const texture = useMemo(pavementTexture, []);
+  const groundMaterial = useMemo(() => {
+    const material = new THREE.MeshStandardMaterial({
+      map: groundMap,
+      color: '#efead9',
+      vertexColors: true,
+      roughness: 1,
+    });
+    // Two world-anchored scales break up obvious repeating rows in the soil texture.
+    material.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <map_fragment>',
+        `#ifdef USE_MAP
+          vec4 detail = texture2D(map, vMapUv);
+          vec2 broadUv = mat2(0.8, -0.6, 0.6, 0.8) * vMapUv * 0.27 + vec2(0.31, 0.67);
+          vec4 broad = texture2D(map, broadUv);
+          diffuseColor *= mix(detail, broad, 0.48);
+        #endif`,
       );
-      if (i < 220) {
-        const v = i * 2;
-        indices.push(v, v + 1, v + 2, v + 1, v + 3, v + 2);
+    };
+    material.customProgramCacheKey = () => 'bikesim-ground-two-scales-v1';
+    return material;
+  }, [groundMap]);
+  useEffect(() => () => groundMaterial.dispose(), [groundMaterial]);
+  useEffect(
+    () => () => {
+      Object.values(geometries).forEach((g) => g.dispose());
+    },
+    [geometries],
+  );
+  useEffect(() => () => texture.dispose(), [texture]);
+  const items = useMemo(() => {
+    const trees: TreePlacement[] = [];
+    const rocks: Placement[] = [],
+      agaves: Placement[] = [],
+      grasses: Placement[] = [],
+      posts: Placement[] = [],
+      rails: Placement[] = [];
+    const place = (s: number, lateral: number) => terrainPoint(s, lateral, route);
+    const step = low ? 11 : 7;
+    for (let s = Math.floor(start / step) * step; s < start + length; s += step) {
+      const seed = s + 12000,
+        side = random(seed) > 0.5 ? 1 : -1;
+      const lateral = side * (7 + random(seed + 4) ** 2 * 95);
+      const p = place(s, lateral),
+        size = 1 + random(seed + 9) * 2.5;
+      if (random(seed + 6) > 0.45) {
+        trees.push({ position: p.clone(), size: size * 3.6, rotation: -Math.atan(heading(s)) });
+      } else {
+        rocks.push({
+          position: p.clone().add(new THREE.Vector3(0, size * 0.17, 0)),
+          scale: [size * 0.65, size * 0.35, size * 0.5],
+          rotation: seed,
+          color: random(seed + 3) > 0.5 ? '#aaa18b' : '#8c8976',
+        });
+      }
+      for (let j = 0; j < 3; j++) {
+        const pos = place(s + j * 2.1, side * (6.4 + random(seed + j + 44) * 19));
+        const scale = 0.5 + random(seed + j + 25) * 0.6;
+        agaves.push({ position: pos, scale: [scale, scale, scale], rotation: seed + j });
+      }
+      for (let j = 0; j < (low ? 4 : 12); j++) {
+        const pos = place(
+          s + random(seed + j * 12) * step,
+          (j % 2 ? 1 : -1) * (4.7 + random(seed + j * 14) * 23),
+        );
+        const h = 0.2 + random(seed + j) * 0.5;
+        grasses.push({
+          position: pos,
+          scale: [1.5, h, 1.5],
+          rotation: seed,
+          color: j % 2 ? '#a49d6b' : '#8d9565',
+        });
       }
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    g.setIndex(indices);
-    g.computeVertexNormals();
-    return g;
-  }, [width, offset, layer]);
+    for (let s = Math.floor(start / 24) * 24; s < start + length; s += 24) {
+      for (const side of [-1, 1]) {
+        const p = place(s, side * 4.8);
+        posts.push({
+          position: p.clone().add(new THREE.Vector3(0, 0.48, 0)),
+          scale: [1.7, 0.96, 1.7],
+          rotation: -Math.atan(heading(s)),
+          color: '#e5dfc5',
+        });
+        posts.push({
+          position: p.clone().add(new THREE.Vector3(0, 0.83, 0)),
+          scale: [1.8, 0.12, 1.8],
+          rotation: -Math.atan(heading(s)),
+          color: side > 0 ? '#bc7850' : '#e1bc69',
+        });
+      }
+    }
+    for (let s = Math.floor(start / 8) * 8; s < start + length; s += 8) {
+      if (Math.floor(s / 240) % 3 !== 0) continue;
+      const p = place(s, -11),
+        q = place(s + 8, -11);
+      posts.push({
+        position: p.clone().add(new THREE.Vector3(0, 0.6, 0)),
+        scale: [1.1, 1.2, 1.1],
+        color: '#857555',
+      });
+      for (const h of [0.45, 0.95])
+        rails.push({
+          position: p
+            .clone()
+            .lerp(q, 0.5)
+            .add(new THREE.Vector3(0, h, 0)),
+          scale: [p.distanceTo(q), 1, 1],
+          rotation: Math.atan2(-(q.z - p.z), q.x - p.x),
+        });
+    }
+    return { trees, rocks, agaves, grasses, posts, rails };
+  }, [start, route, low]);
   return (
-    <mesh geometry={geometry}>
-      <meshStandardMaterial
-        color={color}
-        side={THREE.DoubleSide}
-        polygonOffset
-        polygonOffsetFactor={-layer}
-        polygonOffsetUnits={-layer}
-      />
-    </mesh>
+    <>
+      <mesh geometry={geometries.ground} material={groundMaterial} />
+      <mesh geometry={geometries.shoulder}>
+        <meshStandardMaterial color="#c4b596" roughness={1} />
+      </mesh>
+      <mesh geometry={geometries.road}>
+        <meshStandardMaterial map={texture} roughness={0.96} />
+      </mesh>
+
+      <Vegetation texture={treeMap} trees={items.trees} />
+
+      <Instances geometry={geometries.rock} items={items.rocks} color="#a69b83" />
+      <Instances geometry={geometries.agave} items={items.agaves} color="#ffffff" vertexColors />
+      <Instances geometry={geometries.grass} items={items.grasses} color="#a49d6b" />
+      <Instances geometry={geometries.post} items={items.posts} color="#e5dfc5" />
+      <Instances geometry={geometries.rail} items={items.rails} color="#8e7d60" />
+    </>
   );
 }
 function World({
@@ -55,137 +224,52 @@ function World({
   distance,
   grade,
   quality,
+  route,
   onReady,
-}: {
-  speed: number;
-  distance?: number;
-  grade: number;
-  quality: string;
-  onReady?: () => void;
-}) {
+}: SceneProps & { speed: number; grade: number; quality: string }) {
   const invalidate = useThree((s) => s.invalidate);
-  const moving = speed > 0;
+  const horizon = useLoader(THREE.TextureLoader, '/assets/sierra-horizon.jpg');
+  horizon.colorSpace = THREE.SRGBColorSpace;
+  horizon.repeat.set(1, 0.65);
+  const travel = useRef(distance ?? 0),
+    ready = useRef(false);
+  const [section, setSection] = useState(Math.floor((distance ?? 0) / 240));
+  const activeSection = useRef(section);
   useEffect(() => {
-    if (!moving) return;
-    const timer = setInterval(invalidate, quality === 'low' ? 100 : 1000 / 60);
+    if (speed <= 0) return;
+    const timer = setInterval(invalidate, quality === 'low' ? 1000 / 30 : 1000 / 60);
     return () => clearInterval(timer);
-  }, [moving, quality, invalidate]);
-  const markings = useRef<THREE.Group>(null);
-  const roadside = useRef<THREE.Group>(null);
-  const terrain = useRef<THREE.Group>(null);
-  const travel = useRef(0);
-  const smoothGrade = useRef(0);
-  const ready = useRef(false);
-  const props = useMemo(
-    () =>
-      Array.from({ length: 110 }, (_, i) => ({
-        z: (i * 23.71) % 530,
-        side: i % 2 ? 1 : -1,
-        x: 8 + ((i * 17) % 75),
-        scale: 0.7 + ((i * 11) % 20) / 10,
-      })),
-    [],
-  );
-  useFrame((state, delta) => {
+  }, [speed > 0, quality, invalidate]);
+  useFrame(({ camera }, delta) => {
     if (!ready.current) {
       ready.current = true;
       setTimeout(() => onReady?.(), 0);
     }
     const dt = Math.min(delta, 0.1);
-    // Ride distance comes from physics, so scenery cannot lag the odometer on slow frames.
     if (distance !== undefined)
       travel.current =
-        speed === 0 ? distance : THREE.MathUtils.damp(travel.current, distance, 15, dt);
+        speed === 0 ? distance : THREE.MathUtils.damp(travel.current, distance, 20, dt);
     else travel.current += (speed / 3.6) * dt;
-    smoothGrade.current = THREE.MathUtils.damp(smoothGrade.current, grade, 0.3, dt);
-    state.camera.position.set(curve(0) + 1.7, 1.65, 3);
-    state.camera.lookAt(curve(50) + 1.7, 1.1 + smoothGrade.current * 0.5, -50);
-    if (terrain.current) terrain.current.rotation.x = Math.atan(smoothGrade.current / 100);
-    markings.current?.children.forEach((m, i) => {
-      const z = i * 10 - (travel.current % 10) - 15;
-      m.position.set(curve(z), 0.085, -z);
-      m.rotation.y = -Math.atan((curve(z + 1) - curve(z - 1)) / 2);
-    });
-    roadside.current?.children.forEach((m, i) => {
-      const p = props[i];
-      const z = ((((p.z - travel.current) % 530) + 530) % 530) - 20;
-      m.position.set(curve(z) + p.x * p.side, 0, -z);
-    });
+    const s = travel.current,
+      next = Math.floor(s / 240);
+    if (next !== activeSection.current) {
+      activeSection.current = next;
+      setSection(next);
+    }
+    const eye = roadPoint(s, 1.65, route, 1.62);
+    const look = roadPoint(s + 32, 1.65, route, 1.15);
+    if (!route) look.y += grade * 0.24;
+    camera.position.copy(eye);
+    camera.lookAt(look);
   });
   return (
     <>
-      <color attach="background" args={['#b9d0cb']} />
-      <fog attach="fog" args={['#bdcec3', 100, 480]} />
-      <hemisphereLight args={['#e9f1e4', '#6f6246', 2.4]} />
-      <directionalLight position={[-50, 65, -90]} color="#ffdd9f" intensity={3} />
-      {Array.from({ length: 16 }, (_, i) => (
-        <mesh
-          key={i}
-          position={[(i - 7.5) * 88, 15, -350 - (i % 3) * 75]}
-          scale={[80 + (i % 3) * 22, 80 + (i % 4) * 20, 75]}
-        >
-          <icosahedronGeometry args={[1, 1]} />
-          <meshStandardMaterial color={i % 2 ? '#87958a' : '#738b82'} flatShading />
-        </mesh>
-      ))}
-      <group ref={terrain}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, -250]}>
-          <planeGeometry args={[1800, 1800]} />
-          <meshStandardMaterial color="#aaa275" />
-        </mesh>
-        <Ribbon width={9} color="#cdc5a5" />
-        <Ribbon width={7.2} color="#525853" layer={2} />
-        <Ribbon width={0.1} offset={3.35} color="#e7e4cb" layer={3} />
-        <Ribbon width={0.1} offset={-3.35} color="#e7e4cb" layer={3} />
-        <group ref={markings}>
-          {Array.from({ length: 65 }, (_, i) => (
-            <mesh key={i} rotation={[-Math.PI / 2, 0, 0]}>
-              <boxGeometry args={[0.12, 3.6, 0.012]} />
-              <meshStandardMaterial color="#e5d9a2" />
-            </mesh>
-          ))}
-        </group>
-        <group ref={roadside}>
-          {props.slice(0, quality === 'low' ? 55 : 110).map((p, i) => (
-            <group key={i} scale={p.scale}>
-              {i % 3 === 0 ? (
-                <>
-                  <mesh position={[0, 1, 0]}>
-                    <cylinderGeometry args={[0.15, 0.22, 2, 5]} />
-                    <meshStandardMaterial color="#665947" />
-                  </mesh>
-                  <mesh position={[0, 2.9, 0]} scale={[1.6, 1.5, 1.4]}>
-                    <icosahedronGeometry args={[1, 1]} />
-                    <meshStandardMaterial color={i % 2 ? '#697d4d' : '#526e4d'} flatShading />
-                  </mesh>
-                </>
-              ) : i % 3 === 1 ? (
-                <mesh position={[0, 0.35, 0]} scale={[1.3, 0.55, 0.9]}>
-                  <icosahedronGeometry args={[1, 0]} />
-                  <meshStandardMaterial color="#a5987a" flatShading />
-                </mesh>
-              ) : (
-                <group>
-                  {Array.from({ length: 6 }, (_, j) => (
-                    <mesh
-                      key={j}
-                      position={[Math.sin(j) * 0.3, 0.45, Math.cos(j) * 0.3]}
-                      rotation={[Math.cos(j) * 0.7, j, Math.sin(j) * 0.7]}
-                    >
-                      <coneGeometry args={[0.17, 1.9, 3]} />
-                      <meshStandardMaterial color="#648b75" />
-                    </mesh>
-                  ))}
-                </group>
-              )}
-            </group>
-          ))}
-        </group>
-      </group>
-      <mesh position={[-180, 125, -450]}>
-        <sphereGeometry args={[18, 24, 16]} />
-        <meshBasicMaterial color="#fff2c3" />
-      </mesh>
+      <primitive attach="background" object={horizon} />
+      <fog attach="fog" args={['#cbd6c5', 240, 1250]} />
+
+      <hemisphereLight args={['#e1edf0', '#b2a17a', 1.7]} />
+      <directionalLight position={[-100, 160, -120]} color="#fff1d1" intensity={1.9} />
+      <Landscape start={section * 240 - 160} route={route} low={quality === 'low'} />
     </>
   );
 }
@@ -210,32 +294,41 @@ class SceneBoundary extends Component<
     );
   }
 }
+type SceneProps = {
+  speed?: number;
+  distance?: number;
+  grade?: number;
+  quality?: string;
+  route?: Route;
+  onReady?: () => void;
+};
 function RoadScene({
   speed = 0,
   distance,
   grade = 0,
   quality = 'high',
+  route,
   onReady,
-}: {
-  speed?: number;
-  distance?: number;
-  grade?: number;
-  quality?: string;
-  onReady?: () => void;
-}) {
+}: SceneProps) {
   return (
     <SceneBoundary onReady={onReady}>
       <Canvas
         frameloop="demand"
-        dpr={quality === 'low' ? 0.8 : [1, 1.5]}
-        camera={{ fov: 64, near: 0.5, far: 1000 }}
-        gl={{ antialias: quality !== 'low', powerPreference: 'high-performance' }}
+        dpr={quality === 'low' ? 1 : [1, 1.5]}
+        camera={{ fov: 66, near: 0.1, far: 3500 }}
+        gl={{
+          antialias: quality !== 'low',
+          powerPreference: 'high-performance',
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.05,
+        }}
       >
         <World
           speed={speed}
           distance={distance}
           grade={grade}
           quality={quality}
+          route={route}
           onReady={onReady}
         />
       </Canvas>

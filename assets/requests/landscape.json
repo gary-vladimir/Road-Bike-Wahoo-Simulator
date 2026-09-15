@@ -1,0 +1,32 @@
+[
+  {
+    "name": "oaxaca-tree",
+    "input": {
+      "prompt": "Photorealistic game vegetation atlas asset. One solitary mature Mexican mesquite tree with a beautiful wide irregular airy canopy of tiny olive-green leaves, many small organic leaf clusters, thin visibly branching gnarled brown trunk. Entire tree fully visible from roots to crown, centered, occupies 90 percent of frame height and width, frontal elevation at eye level. Pure uniform white background, NO horizon, NO ground, NO shadow, NO text. Natural soft daylight, detailed individual foliage, realistic proportions, canopy twice as wide as exposed trunk height. Isolated botanical photographic cutout for a game billboard. Not an illustration, not low poly, not a sphere, not a perfect round tree.",
+      "aspect_ratio": "1:1",
+      "output_format": "png",
+      "resolution": "2K",
+      "allow_fallback_model": false
+    }
+  },
+  {
+    "name": "valley-ground",
+    "input": {
+      "prompt": "Photorealistic seamlessly tileable top-down albedo material texture for a rural Oaxaca valley floor. A subtle natural mix of fine dusty beige limestone soil, tiny pale stones, low dry straw grasses and muted sage olive ground cover. Uniform overhead orthographic view, flat diffuse lighting, no cast shadows, no directional gradient. Ground covers whole square. Real-world footprint approximately four by four meters. Subdued natural earthy palette, nuanced fine grain and varied little grass patches across the full surface. No large rocks, no roads, no trees, no text, no border, no objects, no perspective. Professional video game terrain diffuse texture.",
+      "aspect_ratio": "1:1",
+      "output_format": "jpg",
+      "resolution": "2K",
+      "allow_fallback_model": false
+    }
+  },
+  {
+    "name": "sierra-horizon",
+    "input": {
+      "prompt": "Photorealistic wide landscape matte painting for a cycling simulator background. Distant Sierra Madre mountains around the Oaxaca central valleys in Mexico. Multiple layered irregular ridgelines recede in pale blue atmospheric haze; warm sage-green and dusty olive foothills in front, richly detailed folded slopes and subtle rocky outcrops. Bright soft morning light from upper left. Quiet pale powder-blue sky with a few delicate wispy clouds occupies upper 48 percent, mountain ridgelines run continuously left to right in the middle, foreground lower 15 percent is softly hazy muted beige-green valley floor. No roads, no buildings, no trees in foreground, no people, no lettering. Horizontal panorama, believable fine photographic geological detail, restrained contrast and soft distance haze, not dramatic alpine mountains, no snow.",
+      "aspect_ratio": "16:9",
+      "output_format": "jpg",
+      "resolution": "2K",
+      "allow_fallback_model": false
+    }
+  }
+]

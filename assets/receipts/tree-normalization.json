@@ -1,0 +1,9 @@
+{
+  "source": "assets/sources/oaxaca-tree.png",
+  "output": "public/assets/oaxaca-tree.webp",
+  "operation": "White matte removal, color decontamination, alpha-bounds crop, 1536px WebP",
+  "width": 1536,
+  "height": 1284,
+  "bytes": 842882,
+  "sha256": "d58647ade38116ef60612f02e575c025beaac766bdc07239edd12daddd7ff355"
+}

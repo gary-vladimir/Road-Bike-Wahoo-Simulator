@@ -22,6 +22,8 @@ Start on **Ride**, choose a road, and select **Start road demo**. Adjust demo ef
 
 Try **Descent to the valley → Coast**: fresh zero watts and zero cadence continue accumulating distance downhill. Gravity can accelerate a descent from rest, while drag limits speed. On the flat, momentum decays gradually; uphill it decays faster and stops without rolling backward. Pausing or losing live telemetry explicitly freezes the ride, unlike coasting. See [physics assumptions and verification](docs/ROAD_PHYSICS.md).
 
+The refreshed scene has aligned road paint, textured terrain, mesquite trees and a mountain backdrop. Use the **Focus on the road** eye button beside fullscreen to reduce the HUD while retaining metrics and Pause/Stop. Route-library images are captured from the simulator and load without running 3D in the background. See [visual design, asset provenance and limitations](docs/VISUAL_REFRESH.md).
+
 For a structured power workout:
 
 1. Open **Workouts** and select a preset. **First five minutes** is the shortest supplied preset.

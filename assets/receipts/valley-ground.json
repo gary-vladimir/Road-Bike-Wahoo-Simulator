@@ -1,0 +1,16 @@
+{
+  "model": "google/nano-banana-pro",
+  "id": "rgp6d0ckydrmt0d0mndrbn3mgr",
+  "state": "succeeded",
+  "estimatedUsd": 0.15,
+  "createdAt": "2026-09-15T13:57:17.427Z",
+  "path": "public/assets/valley-ground.jpg",
+  "bytes": 1636164,
+  "sha256": "e006ef996a11f8a72999a9402f24133e95ac70e2431c4cae99c75edd4c2c4073",
+  "metrics": {
+    "image_output_count": 1,
+    "predict_time": 43.242025217,
+    "resolution_target": "2K",
+    "total_time": 43.260412909
+  }
+}

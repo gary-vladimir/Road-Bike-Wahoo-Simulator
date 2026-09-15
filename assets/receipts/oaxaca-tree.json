@@ -1,0 +1,16 @@
+{
+  "model": "google/nano-banana-pro",
+  "id": "25r0yqza41rmy0d0mnda4fg38c",
+  "state": "succeeded",
+  "estimatedUsd": 0.15,
+  "createdAt": "2026-09-15T13:56:33.952Z",
+  "path": "assets/sources/oaxaca-tree.png",
+  "bytes": 5300096,
+  "sha256": "3f69d7a0102a81367022b686a1ab76e8d0a5f027ebb30915f70195c789181723",
+  "metrics": {
+    "image_output_count": 1,
+    "predict_time": 41.742528174,
+    "resolution_target": "2K",
+    "total_time": 41.762561999
+  }
+}

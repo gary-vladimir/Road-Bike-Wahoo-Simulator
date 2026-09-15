@@ -665,3 +665,710 @@ footer > span:last-child {
     flex-wrap: wrap;
   }
 }
+
+/* September visual refresh: an editorial route library and an unobstructed ride. */
+:root {
+  --bg: #101a18;
+  --panel: #192622;
+  --line: #30423a;
+  --muted: #9eafa6;
+  --lime: #d6ed93;
+  --text: #f0f4eb;
+}
+body {
+  background: radial-gradient(ellipse at 15% 0%, #21332a 0, transparent 50%), var(--bg);
+}
+.topbar {
+  height: 78px;
+  gap: 48px;
+  background: #101a18e8;
+}
+.brand {
+  letter-spacing: -1.2px;
+}
+.topbar nav {
+  gap: 8px;
+  align-items: center;
+}
+.topbar nav button {
+  height: 36px;
+  border: 0;
+  border-radius: 20px;
+  padding: 0 18px;
+}
+.topbar nav button.active {
+  background: #d6ed9314;
+  color: var(--lime);
+}
+.library {
+  padding-top: 36px;
+  max-width: 1600px;
+}
+h1 {
+  font-size: 46px;
+  font-weight: 530;
+  letter-spacing: -2px;
+}
+.road-library .page-heading {
+  margin-bottom: 26px;
+}
+.road-library .feature {
+  height: 390px;
+  display: block;
+  position: relative;
+  border-radius: 18px;
+  border-color: #738d6b44;
+  box-shadow: 0 20px 70px #0003;
+}
+.road-library .feature-scene {
+  position: absolute;
+  inset: 0;
+}
+.route-hero {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 60%;
+}
+.road-library .feature-copy {
+  position: relative;
+  width: 45%;
+  height: 100%;
+  z-index: 1;
+  padding: 42px;
+  pointer-events: none;
+  background: linear-gradient(90deg, #12291aed, #12291a91 65%, transparent);
+}
+.road-library .feature-copy h2 {
+  font-size: 54px;
+  letter-spacing: -2px;
+  line-height: 1.06;
+  font-weight: 500;
+}
+.road-library .feature-copy p {
+  color: #dee6cd;
+  font-size: 15px;
+}
+.road-library .feature-copy .eyebrow {
+  color: #d6ed93;
+}
+.road-library .feature-foot {
+  color: #eff4e5;
+}
+.road-library .scene-tag {
+  left: auto;
+  right: 20px;
+  max-width: 45%;
+  bottom: 20px;
+  font-size: 9px;
+  border: 0;
+  background: #18281dbb;
+}
+.road-library .workout-layout {
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 28px;
+}
+.route-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+.route-grid .workout-card {
+  padding: 0 22px 20px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #21342a, #17251f);
+}
+.route-cover {
+  height: 155px;
+  margin: 0 -22px 22px;
+  position: relative;
+  background: #809485;
+  overflow: hidden;
+}
+.route-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s;
+}
+.workout-card:hover .route-cover img {
+  transform: scale(1.04);
+}
+.route-cover:after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 40%, #17251f9e);
+}
+.route-cover span {
+  position: absolute;
+  z-index: 1;
+  bottom: 14px;
+  left: 20px;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 1.7px;
+  color: #fff;
+}
+.route-grid .workout-card > .eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.3px;
+  color: #b3c3ae;
+  margin-bottom: 10px;
+}
+.route-grid .workout-card h3 {
+  font-size: 23px;
+  margin: 0 0 10px;
+  letter-spacing: -0.7px;
+}
+.route-grid .workout-card p {
+  min-height: 64px;
+  font-size: 13px;
+}
+.route-grid .terrain-profile {
+  height: 55px;
+}
+.route-grid .card-meta {
+  border-top: 1px solid #ffffff12;
+  padding-top: 14px;
+}
+.workout-card.chosen {
+  border-color: var(--lime);
+  box-shadow: 0 0 0 1px #d6ed9329;
+}
+.road-library .workout-detail {
+  background: #1c2d23;
+  border: 1px solid #41513b;
+  border-radius: 14px;
+  padding: 26px;
+}
+.workout-detail .primary {
+  border-radius: 9px;
+}
+.source-label select {
+  border-radius: 8px;
+}
+.road-library .source-label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.road-library .source-label input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--lime);
+}
+.road-library .fine-print {
+  text-align: left;
+  line-height: 1.65;
+}
+.feature,
+.panel,
+.history-item,
+.workout-detail,
+.workout-card {
+  box-shadow: 0 8px 30px #0000000d;
+}
+.primary {
+  transition:
+    background 0.18s,
+    box-shadow 0.18s;
+}
+.primary:hover {
+  box-shadow: 0 4px 24px #d6ed931c;
+}
+.view-controls {
+  display: flex;
+  gap: 8px;
+}
+.ride-screen {
+  min-height: 620px;
+}
+.ride-world:after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#14292366, transparent 22%, transparent 75%, #17291d30);
+}
+.ride-top {
+  top: 20px;
+  left: 24px;
+  right: 24px;
+}
+.glass-button {
+  border-radius: 10px;
+  background: #10251dcc;
+  border-color: #ffffff26;
+  padding: 11px 14px;
+}
+.ride-title h2 {
+  font-size: 21px;
+  letter-spacing: -0.6px;
+}
+.ride-title .eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.7px;
+  margin-bottom: 6px;
+}
+.ride-metrics {
+  top: 94px;
+  left: 24px;
+  width: auto;
+  flex-direction: row;
+  padding: 16px 22px;
+  gap: 28px;
+  border-radius: 12px;
+  background: #10221ddd;
+  box-shadow: 0 8px 28px #00000018;
+}
+.ride-metrics > div {
+  min-width: 115px;
+}
+.ride-metrics > div + div {
+  border-left: 1px solid #ffffff20;
+  padding-left: 24px;
+}
+.ride-metrics strong,
+.ride-metrics .power-metric strong {
+  font-size: 42px;
+  line-height: 1.15;
+  letter-spacing: -1px;
+  margin: 4px 0 6px;
+  font-weight: 550;
+}
+.ride-metrics strong small {
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: 0;
+}
+.ride-metrics > div > span {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+}
+.ride-metrics > div > div {
+  font-size: 10px;
+}
+.ride-route {
+  right: 24px;
+  top: 94px;
+  width: 240px;
+  min-width: 0;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: #10221dce;
+}
+.ride-route .route-badge {
+  margin-bottom: 8px;
+  font-size: 9px;
+}
+.ride-route > strong {
+  font-size: 14px;
+}
+.ride-route > span:last-of-type {
+  margin: 5px 0 12px;
+  font-size: 10px;
+}
+.ride-route > div {
+  padding-top: 9px;
+  font-size: 10px;
+}
+.ride-route b {
+  font-size: 24px;
+  font-weight: 550;
+}
+.ride-route p {
+  font-size: 10px;
+  margin: 5px 0 8px;
+}
+.coasting-state {
+  gap: 5px;
+  margin-top: 8px;
+}
+.coasting-state strong {
+  font-size: 12px;
+}
+.coasting-state span {
+  font-size: 10px;
+  line-height: 1.4;
+}
+.coasting-state small {
+  display: none;
+}
+.ride-bottom {
+  left: 24px;
+  right: 24px;
+  bottom: 20px;
+  padding: 15px 22px 12px;
+  border-radius: 14px;
+  background: #10221de8;
+  box-shadow: 0 10px 40px #0002;
+}
+.ride-bottom > .terrain-profile {
+  height: 36px;
+  margin-top: 8px;
+}
+.interval-line {
+  margin-bottom: 4px;
+  gap: 24px;
+}
+.interval-line h2 {
+  font-size: 17px;
+  margin: 0;
+}
+.interval-line p {
+  font-size: 10px;
+  margin-top: 5px;
+}
+.interval-line .eyebrow {
+  font-size: 8px;
+  letter-spacing: 1.6px;
+  margin-bottom: 5px;
+}
+.interval-clock strong {
+  font-size: 27px;
+  font-weight: 550;
+}
+.interval-clock > span {
+  font-size: 9px;
+}
+.next-block {
+  min-width: 130px;
+  gap: 4px;
+}
+.next-block > span {
+  font-size: 8px;
+}
+.next-block strong {
+  font-size: 12px;
+}
+.next-block small {
+  font-size: 10px;
+}
+.ride-controls {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #ffffff1a;
+}
+.ride-controls .secondary,
+.ride-controls .stop-button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.ride-controls > span {
+  font-size: 11px;
+}
+.demo-effort {
+  font-size: 11px;
+  flex-direction: row;
+  white-space: nowrap;
+}
+.demo-effort input {
+  width: 110px;
+}
+.ride-controls .stop-button {
+  background: #913f32;
+  border-color: #c67659;
+}
+.ride-screen[data-immersive='true'] .ride-route > strong,
+.ride-screen[data-immersive='true'] .ride-route > span,
+.ride-screen[data-immersive='true'] .coasting-state,
+.ride-screen[data-immersive='true'] .ride-bottom > .terrain-profile,
+.ride-screen[data-immersive='true'] .ride-bottom > .profile,
+.ride-screen[data-immersive='true'] .interval-line {
+  display: none;
+}
+.ride-screen[data-immersive='true'] .ride-metrics {
+  opacity: 0.88;
+}
+.ride-screen[data-immersive='true'] .ride-bottom {
+  padding-top: 4px;
+}
+.ride-screen[data-immersive='true'] .ride-controls {
+  border: 0;
+}
+.countdown-overlay {
+  background: #0e211733;
+  backdrop-filter: blur(3px);
+}
+.countdown-number {
+  font-size: 130px;
+  font-weight: 550;
+  text-shadow: 0 8px 40px #10241977;
+}
+.countdown-overlay p {
+  max-width: 500px;
+  text-align: center;
+  padding: 0 20px;
+}
+.pause-card {
+  border-radius: 18px;
+  padding: 32px;
+  box-shadow: 0 24px 100px #0004;
+}
+@media (min-width: 1600px) {
+  .road-library .feature {
+    height: 460px;
+  }
+  .ride-bottom {
+    left: 8%;
+    right: 8%;
+  }
+  .route-cover {
+    height: 190px;
+  }
+}
+@media (max-width: 1100px) {
+  .road-library .workout-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 20px;
+  }
+  .route-grid {
+    gap: 15px;
+  }
+  .route-grid .workout-card {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .route-cover {
+    margin-left: -16px;
+    margin-right: -16px;
+    height: 130px;
+  }
+  .ride-metrics {
+    gap: 16px;
+    padding: 14px 18px;
+  }
+  .ride-metrics > div {
+    min-width: 105px;
+  }
+  .ride-metrics > div + div {
+    padding-left: 16px;
+  }
+  .ride-route {
+    width: 218px;
+  }
+}
+@media (max-width: 760px) {
+  .topbar {
+    height: auto;
+    gap: 14px;
+    padding: 16px 5%;
+  }
+  .topbar nav {
+    width: 100%;
+    order: 3;
+    gap: 4px;
+    justify-content: space-between;
+  }
+  .topbar nav button {
+    padding: 0 12px;
+    font-size: 12px;
+  }
+  .top-status {
+    width: auto;
+    margin-left: auto;
+    font-size: 10px;
+  }
+  .top-status .separator {
+    display: none;
+  }
+  .library {
+    padding: 28px 5%;
+  }
+  h1,
+  .page-heading h1 {
+    font-size: 34px;
+  }
+  .page-heading p {
+    font-size: 13px;
+  }
+  .road-library .feature {
+    height: 340px;
+  }
+  .road-library .feature-copy {
+    width: 75%;
+    padding: 26px;
+    background: linear-gradient(90deg, #14271ed9, transparent);
+  }
+  .road-library .feature-copy h2 {
+    font-size: 40px;
+  }
+  .road-library .feature-copy p {
+    font-size: 13px;
+  }
+  .road-library .scene-tag {
+    font-size: 7px;
+    max-width: 48%;
+    bottom: 14px;
+    right: 10px;
+  }
+  .road-library .workout-layout {
+    display: flex;
+  }
+  .route-grid {
+    width: 100%;
+    gap: 14px;
+  }
+  .route-grid .workout-card h3 {
+    font-size: 18px;
+  }
+  .route-grid .workout-card p {
+    font-size: 11px;
+    min-height: 84px;
+  }
+  .route-cover {
+    height: 105px;
+  }
+  .route-cover span {
+    font-size: 7px;
+    left: 12px;
+  }
+  .route-grid .workout-card > .eyebrow {
+    font-size: 8px;
+  }
+  .route-grid .card-meta {
+    font-size: 9px;
+    gap: 8px;
+  }
+  .road-library .workout-detail {
+    width: 100%;
+  }
+  .ride-screen {
+    min-height: 680px;
+  }
+  .ride-top {
+    top: 13px;
+    left: 12px;
+    right: 12px;
+    gap: 8px;
+  }
+  .ride-title h2 {
+    font-size: 15px;
+  }
+  .ride-title .eyebrow {
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+  .view-controls {
+    gap: 5px;
+  }
+  .glass-button {
+    padding: 9px;
+    font-size: 11px;
+  }
+  .ride-metrics {
+    top: 78px;
+    left: 12px;
+    right: 12px;
+    padding: 13px 14px;
+    gap: 9px;
+    justify-content: space-between;
+  }
+  .ride-metrics > div {
+    min-width: 0;
+  }
+  .ride-metrics > div + div {
+    padding-left: 12px;
+  }
+  .ride-metrics strong,
+  .ride-metrics .power-metric strong {
+    font-size: 29px;
+  }
+  .ride-metrics > div > div {
+    font-size: 8px;
+    max-width: 110px;
+  }
+  .ride-metrics > div > span {
+    font-size: 8px;
+  }
+  .ride-metrics strong small {
+    font-size: 9px;
+    margin-left: 4px;
+  }
+  .ride-route {
+    display: block;
+    top: 198px;
+    right: 12px;
+    padding: 10px 13px;
+    width: 165px;
+  }
+  .ride-route > strong,
+  .ride-route > span,
+  .ride-route .coasting-state span {
+    display: none !important;
+  }
+  .ride-route > div {
+    border: 0;
+    padding-top: 0;
+  }
+  .ride-route b {
+    font-size: 19px;
+  }
+  .ride-route .coasting-state {
+    margin-top: 5px;
+  }
+  .ride-route .coasting-state strong {
+    font-size: 10px;
+  }
+  .ride-bottom {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    padding: 12px;
+  }
+  .interval-line h2 {
+    font-size: 14px;
+  }
+  .interval-line p {
+    display: none;
+  }
+  .interval-clock strong {
+    font-size: 23px;
+  }
+  .ride-bottom > .terrain-profile {
+    height: 30px;
+  }
+  .ride-controls {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .demo-effort {
+    gap: 8px;
+  }
+  .demo-effort input {
+    width: 90px;
+  }
+  .ride-controls > .secondary {
+    margin-left: auto;
+    flex: 0;
+  }
+  .ride-controls > .stop-button {
+    flex: 0;
+  }
+  .ride-controls > span:not(.ride-time):not(.saved-indicator) {
+    display: none;
+  }
+  .ride-time {
+    font-size: 10px !important;
+  }
+  .ride-warning {
+    top: 180px;
+    left: 12px;
+    right: 12px;
+  }
+  .ride-screen[data-immersive='true'] .ride-route {
+    top: 198px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .route-cover img,
+  .workout-card {
+    transition: none;
+  }
+}

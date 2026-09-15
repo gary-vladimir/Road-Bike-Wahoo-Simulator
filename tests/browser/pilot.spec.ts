@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForInitialRide } from '../helpers/ride-ready';
 
 test.beforeEach(async ({ page }) => {
   test.skip(process.env.VITE_TRAINER_CONTROL !== 'pilot', 'Requires the opt-in pilot server');
@@ -125,7 +126,7 @@ test('controlled road requires readiness, supports coasting, resumes explicitly 
   await page.getByRole('button', { name: /Valley warm-up/ }).click();
   await start.click();
   await expect(page.getByLabel('Trainer control status')).toContainText('Terrain control active');
-  await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 18000 });
+  await waitForInitialRide(page);
   await expect(page.locator('.ride-time')).toContainText('0:02');
   await page.evaluate(() => Object.assign(window, { mockPower: 0, mockCadence: 0 }));
   await expect(page.getByLabel('Motion status')).toContainText(/Coasting|Stopped · pedal to move/);
@@ -187,7 +188,7 @@ test('live SIM road preview runs without FTP and sends no resistance commands', 
   await page.getByRole('button', { name: 'Ride', exact: true }).click();
   await page.getByLabel('Ride source').selectOption('bluetooth');
   await page.getByRole('button', { name: 'Start live road preview', exact: true }).click();
-  await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 18000 });
+  await waitForInitialRide(page);
   await expect(page.getByText('Your effort · no watt target', { exact: true })).toBeVisible();
   expect(
     await page.evaluate(

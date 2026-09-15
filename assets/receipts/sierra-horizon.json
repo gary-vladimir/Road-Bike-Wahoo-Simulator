@@ -1,0 +1,16 @@
+{
+  "model": "google/nano-banana-pro",
+  "id": "rd75h0jcrdrmr0d0mneafa96wc",
+  "state": "succeeded",
+  "estimatedUsd": 0.15,
+  "createdAt": "2026-09-15T13:58:04.739Z",
+  "path": "public/assets/sierra-horizon.jpg",
+  "bytes": 374583,
+  "sha256": "45989cb1943e1311aa7348531852be01417361c76b235e78c58452502d03e40d",
+  "metrics": {
+    "image_output_count": 1,
+    "predict_time": 26.041582833,
+    "resolution_target": "2K",
+    "total_time": 26.058965495
+  }
+}

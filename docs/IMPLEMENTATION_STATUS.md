@@ -1,5 +1,13 @@
 # Implementation status and decisions
 
+## September 15 — road visuals and interface refresh
+
+Road paint now shares the asphalt UVs and remains aligned through bends, hills and streamed section replacements. SIM scenery follows route elevation; near-road frames and distant terrain sampling prevent mesh folds. Textured ground, mesquite foliage, agaves, grass, fencing, delineators and a mountain background replace the earlier primitive landscape. The route library uses actual scene thumbnails, clearer selection and a responsive setup panel. A compact ride HUD adds an optional road-focus view while retaining metrics, controller status and Pause/Stop.
+
+Three Nano Banana Pro assets were generated through Replicate at an estimated $0.45 total; an earlier Imagen request failed without an output. Assets ship locally, and the generation credential is excluded from Git and blocked by the development server. All generation and processing scripts ran inside Docker. See [asset receipts, reproduction steps and visual limitations](VISUAL_REFRESH.md). This visual work does not change trainer control authorization, physics, export behavior or outstanding hardware validation.
+
+Verification: 90 unit tests pass. All 24 browser workflows passed across the full suite and a nine-test rerun covering corrected checks. Cold software-renderer preparation is now awaited separately from the ten-second countdown; the countdown and runtime watchdog were not relaxed. The focus test now follows the existing Stop → paused → Finish & save flow. A stale running Vite configuration initially left the local credential URL readable; the server was restarted with an explicit deny middleware, the request trace was removed, and direct/encoded/raw-import requests now return 403. Default and pilot production builds, formatting, asset checksums and whitespace checks pass. The existing large Three.js bundle warning remains. Desktop/mobile and all four route previews were visually reviewed; no physical trainer commands were sent.
+
 ## September 12 — bounded automatic SIM road integration
 
 The opt-in control build now offers **KICKR · automatic SIM terrain** on Ride. Valley warm-up stays within the already tested slope range. Steeper routes remain previews; the app rejects unsupported control routes rather than clamping physical slope while showing a different hill. The shared SIM adapter retains ±1% authorization, quarter-percentage-point ramps, fresh-power guards, exclusive browser ownership, and acknowledged command serialization. No ERG targets are sent.
