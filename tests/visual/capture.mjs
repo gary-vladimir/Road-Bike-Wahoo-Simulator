@@ -40,6 +40,9 @@ await page.getByRole('button', { name: 'Start road demo', exact: true }).click()
 await page.locator('.countdown-number').waitFor({ state: 'hidden', timeout: 25000 });
 await page.waitForTimeout(1800);
 await page.screenshot({ path: 'test-results/visual/ride.png' });
+await page.setViewportSize({ width: 390, height: 844 });
+await page.screenshot({ path: 'test-results/visual/mobile-ride.png' });
+await page.setViewportSize({ width: 1440, height: 900 });
 await page.getByRole('button', { name: 'Focus on the road', exact: true }).click();
 await page.screenshot({ path: 'test-results/visual/focus.png' });
 await page.getByRole('button', { name: 'Pause', exact: true }).click();

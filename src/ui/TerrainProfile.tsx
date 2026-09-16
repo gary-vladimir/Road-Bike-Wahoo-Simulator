@@ -1,5 +1,13 @@
 import { routeLength, routePosition, type Route } from '../ride/terrain';
-export default function TerrainProfile({ route, meters = 0 }: { route: Route; meters?: number }) {
+export default function TerrainProfile({
+  route,
+  meters = 0,
+  wide = false,
+}: {
+  route: Route;
+  meters?: number;
+  wide?: boolean;
+}) {
   const samples = Array.from({ length: 101 }, (_, i) =>
     routePosition(route, (routeLength(route) * i) / 100),
   );
@@ -12,12 +20,31 @@ export default function TerrainProfile({ route, meters = 0 }: { route: Route; me
     <svg
       className="terrain-profile"
       viewBox="0 0 600 100"
+      preserveAspectRatio={wide ? 'none' : 'xMidYMid meet'}
       role="img"
       aria-label={`${route.name} elevation profile, ${(routeLength(route) / 1000).toFixed(1)} kilometers`}
     >
       <polygon points={`0,94 ${points} 600,94`} fill="#91a76533" />
-      <polyline points={points} stroke="#d9ff69" strokeWidth="2.5" fill="none" />
-      <circle cx={here.progress * 600} cy={y(here.elevation)} r="4" fill="#fff" />
+      <polyline
+        points={points}
+        stroke="#d9ff69"
+        strokeWidth="2.5"
+        fill="none"
+        vectorEffect="non-scaling-stroke"
+      />
+      {wide ? (
+        <line
+          x1={here.progress * 600}
+          x2={here.progress * 600}
+          y1="4"
+          y2="94"
+          stroke="#fff"
+          strokeWidth="2"
+          vectorEffect="non-scaling-stroke"
+        />
+      ) : (
+        <circle cx={here.progress * 600} cy={y(here.elevation)} r="4" fill="#fff" />
+      )}
     </svg>
   );
 }

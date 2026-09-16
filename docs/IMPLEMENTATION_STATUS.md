@@ -1,5 +1,11 @@
 # Implementation status and decisions
 
+## September 16 — scenery depth and terrain contact
+
+The mountain backdrop now uses a curved dome with fixed world orientation, making the horizon respond to camera turns and pitch. Roadside props sit on the exact terrain triangles used by the selected graphics quality; contact shading follows those triangles rather than floating above them. Fence rails join posts across slope changes. The ride elevation profile now spans the HUD with a distance-position marker, and scenery textures load in a single batch. Existing AI assets were reused with no additional paid requests. Trainer control and ride physics are unchanged.
+
+Verification: all 94 unit tests pass, including new raycast checks of terrain contact, matching shadow vertices, fence endpoint transforms and panorama coverage. Six affected browser workflows pass: workout lifecycle, controlled SIM lifecycle with synthetic hardware, free-road effort/coasting/history, downhill zero-watt riding, responsive library previews, and desktop/mobile focus controls. Default and pilot builds pass with the existing large-bundle warning. These checks do not establish physical trainer behavior or Mac frame rate.
+
 ## September 15 — road visuals and interface refresh
 
 Road paint now shares the asphalt UVs and remains aligned through bends, hills and streamed section replacements. SIM scenery follows route elevation; near-road frames and distant terrain sampling prevent mesh folds. Textured ground, mesquite foliage, agaves, grass, fencing, delineators and a mountain background replace the earlier primitive landscape. The route library uses actual scene thumbnails, clearer selection and a responsive setup panel. A compact ride HUD adds an optional road-focus view while retaining metrics, controller status and Pause/Stop.

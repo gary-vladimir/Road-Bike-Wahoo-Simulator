@@ -342,7 +342,7 @@ export default function Ride({
           )}
         </div>
         {route ? (
-          <TerrainProfile route={route} meters={state.distance * 1000} />
+          <TerrainProfile route={route} meters={state.distance * 1000} wide />
         ) : (
           <Profile workout={engine.session.workout} elapsed={state.elapsed} />
         )}

@@ -106,6 +106,7 @@ export function terrainGeometry(start: number, length: number, route?: Route, lo
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  geometry.userData.terrain = { start, length, rows, columns };
   return geometry;
 }
 export function pavementTexture() {

@@ -1,5 +1,13 @@
 # September 15 visual refresh
 
+## September 16 refinement
+
+The mountain image now sits on a curved dome with a fixed world orientation. The dome follows camera translation without following its rotation, so the skyline responds to turns and uphill/downhill pitch instead of sticking to the screen. It represents distant scenery, not nearby mountain geometry.
+
+Trees, rocks and roadside props now sample the actual rendered ground triangles at each graphics quality. Soft contact shading reuses those same triangles, avoiding flat shadow discs that hover above hills. Fence rails match both the direction and height difference between posts. The in-ride elevation strip uses the panel width with a clear distance-position marker; library profiles retain their original aspect ratio. Scenery textures load in one batch to avoid a backdrop-first request waterfall. No further paid image requests were made.
+
+Verification for this refinement: 94 unit tests and six affected browser workflows pass; default and pilot builds pass. Added numerical checks compare placement against actual ground raycasts and confirm fence endpoints on uphill/downhill spans. Captures now include the mobile ride HUD as well as the library.
+
 The road surface, edge lines and dashed centerline now use the same sampled ribbon. Paint is part of the asphalt texture, with UVs anchored to route distance, so it cannot drift away from the road on bends or jump when the next section loads. Camera height, shoulders and nearby props share the road frame. SIM elevation comes from the same route profile used by the ride engine. Distant terrain straightens its sampling rows to avoid folded triangles outside a bend.
 
 The scene adds textured soil with two blended scales, mesquite foliage, agaves, grasses, rocks, delineator posts, timber fencing, softer daylight, atmospheric fog and a mountain backdrop. Object placement uses world coordinates and deterministic seeds. Instancing limits draw calls; low graphics quality reduces vegetation, terrain resolution, pixel ratio and rendering frequency. A stopped scene uses demand rendering. The scene waits for initial assets before the ride countdown.
@@ -37,7 +45,7 @@ The first command rebuilds the transparent tree from its preserved source withou
 
 ## Scope and verification
 
-This remains procedural scenery inspired by Oaxaca, not a geographically mapped route. Mountains are a background image and trees are photographic cards, not fully volumetric scanned assets. The roads and nearby terrain/props are 3D. In particular, the background does not provide full parallax during turns. Real route data, terrain scans and more diverse volumetric vegetation remain future visual work.
+This remains procedural scenery inspired by Oaxaca, not a geographically mapped route. Mountains use an image on a world-oriented dome and trees are photographic cards, not fully volumetric scanned assets. The roads and nearby terrain/props are 3D. The dome responds to viewing direction and pitch but intentionally has no translational parallax. Contact shading is a soft grounding effect, not a physically traced sun shadow. Real route data, terrain scans and more diverse volumetric vegetation remain future visual work.
 
 Geometry regressions cover road width/orientation, shared elevation, streaming position/paint continuity, upward terrain normals, valid vertices and terrain clearance. Browser regressions cover local previews, narrow layouts, focus-mode control access and credential-file blocking, alongside existing ride, trainer and export workflows. Screenshots are inspected separately from numerical tests; software-rendered container captures do not establish frame rate on the rider's Mac or physical trainer behavior.
 

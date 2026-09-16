@@ -2,6 +2,14 @@ import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
 import { Component, type ReactNode, memo, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import Vegetation, { type TreePlacement } from './Vegetation';
+import Horizon from './Horizon';
+import {
+  contactGeometry,
+  contactTexture,
+  railOrientation,
+  terrainSampler,
+  type ContactPatch,
+} from './scenery';
 import type { Route } from '../ride/terrain';
 import {
   agaveGeometry,
@@ -12,13 +20,13 @@ import {
   ribbon,
   roadPoint,
   terrainGeometry,
-  terrainPoint,
 } from './landscape';
 
 type Placement = {
   position: THREE.Vector3;
   scale: [number, number, number];
   rotation?: number;
+  tilt?: number;
   color?: string;
 };
 function Instances({
@@ -40,7 +48,7 @@ function Instances({
     items.forEach((p, i) => {
       object.position.copy(p.position);
       object.scale.set(...p.scale);
-      object.rotation.set(0, p.rotation ?? 0, 0);
+      object.rotation.set(0, p.rotation ?? 0, p.tilt ?? 0);
       object.updateMatrix();
       ref.current!.setMatrixAt(i, object.matrix);
       ref.current!.setColorAt(i, new THREE.Color(p.color ?? color));
@@ -61,12 +69,20 @@ function Instances({
     </instancedMesh>
   );
 }
-function Landscape({ start, route, low }: { start: number; route?: Route; low: boolean }) {
+function Landscape({
+  start,
+  route,
+  low,
+  groundMap,
+  treeMap,
+}: {
+  start: number;
+  route?: Route;
+  low: boolean;
+  groundMap: THREE.Texture;
+  treeMap: THREE.Texture;
+}) {
   const length = 1440;
-  const [groundMap, treeMap] = useLoader(THREE.TextureLoader, [
-    '/assets/valley-ground.jpg',
-    '/assets/oaxaca-tree.webp',
-  ]);
   useMemo(() => {
     groundMap.wrapS = groundMap.wrapT = THREE.RepeatWrapping;
     groundMap.colorSpace = THREE.SRGBColorSpace;
@@ -119,12 +135,13 @@ function Landscape({ start, route, low }: { start: number; route?: Route; low: b
   useEffect(() => () => texture.dispose(), [texture]);
   const items = useMemo(() => {
     const trees: TreePlacement[] = [];
+    const contacts: ContactPatch[] = [];
     const rocks: Placement[] = [],
       agaves: Placement[] = [],
       grasses: Placement[] = [],
       posts: Placement[] = [],
       rails: Placement[] = [];
-    const place = (s: number, lateral: number) => terrainPoint(s, lateral, route);
+    const place = terrainSampler(geometries.ground);
     const step = low ? 11 : 7;
     for (let s = Math.floor(start / step) * step; s < start + length; s += step) {
       const seed = s + 12000,
@@ -134,7 +151,9 @@ function Landscape({ start, route, low }: { start: number; route?: Route; low: b
         size = 1 + random(seed + 9) * 2.5;
       if (random(seed + 6) > 0.45) {
         trees.push({ position: p.clone(), size: size * 3.6, rotation: -Math.atan(heading(s)) });
+        contacts.push({ meters: s, lateral, radius: size * 1.6 });
       } else {
+        contacts.push({ meters: s, lateral, radius: size * 0.85 });
         rocks.push({
           position: p.clone().add(new THREE.Vector3(0, size * 0.17, 0)),
           scale: [size * 0.65, size * 0.35, size * 0.5],
@@ -194,14 +213,31 @@ function Landscape({ start, route, low }: { start: number; route?: Route; low: b
             .lerp(q, 0.5)
             .add(new THREE.Vector3(0, h, 0)),
           scale: [p.distanceTo(q), 1, 1],
-          rotation: Math.atan2(-(q.z - p.z), q.x - p.x),
+          ...railOrientation(p, q),
         });
     }
-    return { trees, rocks, agaves, grasses, posts, rails };
-  }, [start, route, low]);
+    return { trees, rocks, agaves, grasses, posts, rails, contacts };
+  }, [start, low, geometries.ground]);
+  const shadeMap = useMemo(contactTexture, []);
+  const shadeGeometry = useMemo(
+    () => contactGeometry(geometries.ground, items.contacts),
+    [geometries.ground, items.contacts],
+  );
+  useEffect(() => () => shadeMap.dispose(), [shadeMap]);
+  useEffect(() => () => shadeGeometry.dispose(), [shadeGeometry]);
   return (
     <>
       <mesh geometry={geometries.ground} material={groundMaterial} />
+      <mesh geometry={shadeGeometry} renderOrder={1}>
+        <meshBasicMaterial
+          map={shadeMap}
+          transparent
+          depthWrite={false}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
+        />
+      </mesh>
       <mesh geometry={geometries.shoulder}>
         <meshStandardMaterial color="#c4b596" roughness={1} />
       </mesh>
@@ -228,9 +264,14 @@ function World({
   onReady,
 }: SceneProps & { speed: number; grade: number; quality: string }) {
   const invalidate = useThree((s) => s.invalidate);
-  const horizon = useLoader(THREE.TextureLoader, '/assets/sierra-horizon.jpg');
+  // One batch avoids waiting for the backdrop before requesting the ground and foliage.
+  const [horizon, groundMap, treeMap] = useLoader(THREE.TextureLoader, [
+    '/assets/sierra-horizon.jpg',
+    '/assets/valley-ground.jpg',
+    '/assets/oaxaca-tree.webp',
+  ]);
   horizon.colorSpace = THREE.SRGBColorSpace;
-  horizon.repeat.set(1, 0.65);
+  horizon.repeat.set(1, 1);
   const travel = useRef(distance ?? 0),
     ready = useRef(false);
   const [section, setSection] = useState(Math.floor((distance ?? 0) / 240));
@@ -261,15 +302,22 @@ function World({
     if (!route) look.y += grade * 0.24;
     camera.position.copy(eye);
     camera.lookAt(look);
-  });
+  }, -1);
   return (
     <>
-      <primitive attach="background" object={horizon} />
+      <color attach="background" args={['#cbddea']} />
+      <Horizon texture={horizon} />
       <fog attach="fog" args={['#cbd6c5', 240, 1250]} />
 
       <hemisphereLight args={['#e1edf0', '#b2a17a', 1.7]} />
       <directionalLight position={[-100, 160, -120]} color="#fff1d1" intensity={1.9} />
-      <Landscape start={section * 240 - 160} route={route} low={quality === 'low'} />
+      <Landscape
+        start={section * 240 - 160}
+        route={route}
+        low={quality === 'low'}
+        groundMap={groundMap}
+        treeMap={treeMap}
+      />
     </>
   );
 }
