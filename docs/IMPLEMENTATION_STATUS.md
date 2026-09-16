@@ -1,5 +1,15 @@
 # Implementation status and decisions
 
+## September 16 — real ride evidence and clearer coasting
+
+Automatic Valley warm-up completion, terrain feel and FIT download are now rider-confirmed. The supplied file passes Garmin integrity/decoding checks: 3 km, 7:56.6, with moving zero-watt records. Its longest coast continues 53.85 m while slowing from 26.00 to 22.58 km/h on an inferred roughly −0.25% descent. See the [ride review](VALLEY_RIDE_REVIEW.md).
+
+The HUD now reports gaining speed, slowing down or steady speed from the same force balance as the motion integrator. Mobile keeps the trend visible. Route setup explains gentle descents and the difference between trainer braking and virtual gravity. FIT exports now preserve signed virtual road grade (including fractional downhill grades), validate its range, and omit decorative ERG hills. Existing force equations and trainer-control limits remain unchanged; shallow downhill slowing is expected physics, not a reason to force acceleration.
+
+Pause/resume, fault recovery and manual Strava import remain physical/external checks. The supplied speeds are model-generated and do not independently establish outdoor accuracy; mass, rolling resistance and aerodynamics still include disclosed assumptions.
+
+Verification: all 98 unit tests pass, including shallow-downhill deceleration, steep-downhill acceleration, speed-dependent coast balance and signed fractional FIT grade. Five affected browser workflows pass: saved/live-shaped FIT download, completed demo FIT download, mock-controlled SIM lifecycle, free-road coasting/history, and downhill zero-watt motion with desktop/mobile trend checks. Both production configurations build; the existing large Three.js bundle warning remains. Desktop/mobile coasting screenshots were visually reviewed. No physical control commands were sent.
+
 ## September 16 — scenery depth and terrain contact
 
 The mountain backdrop now uses a curved dome with fixed world orientation, making the horizon respond to camera turns and pitch. Roadside props sit on the exact terrain triangles used by the selected graphics quality; contact shading follows those triangles rather than floating above them. Fence rails join posts across slope changes. The ride elevation profile now spans the HUD with a distance-position marker, and scenery textures load in a single batch. Existing AI assets were reused with no additional paid requests. Trainer control and ride physics are unchanged.

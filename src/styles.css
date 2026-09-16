@@ -991,6 +991,11 @@ h1 {
 .coasting-state strong {
   font-size: 12px;
 }
+.coasting-trend {
+  font-size: 10px;
+  font-style: normal;
+  color: #d9eadc;
+}
 .coasting-state span {
   font-size: 10px;
   line-height: 1.4;

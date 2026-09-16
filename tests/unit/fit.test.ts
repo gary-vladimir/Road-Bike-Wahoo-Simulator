@@ -48,6 +48,7 @@ describe('Strava FIT activity export', () => {
     expect(m.sessionMesgs[0].timestamp).toEqual(new Date('2026-09-11T14:00:20Z'));
     expect(m.eventMesgs.map((e) => e.eventType)).toEqual(['start', 'stopAll', 'start', 'stopAll']);
     expect(m.recordMesgs.map((r) => r.power)).toEqual([undefined, 150, 0, 0, 100, 120]);
+    expect(m.recordMesgs.map((r) => r.grade)).toEqual([undefined, 0, -3, -3, 1, 1]);
     expect(m.recordMesgs[3]).toMatchObject({ distance: 15, speed: 4, cadence: 0 });
     expect(m.recordMesgs[4]).not.toHaveProperty('cadence');
     expect(
@@ -76,6 +77,7 @@ describe('Strava FIT activity export', () => {
     });
     expect(m.sessionMesgs[0].startTime).toEqual(new Date(s.startedAt));
     expect(m.fileIdMesgs[0].productName).toContain('DEMO');
+    expect(m.recordMesgs.every((r) => r.grade === undefined)).toBe(true);
     expect(activityFileName(s)).toMatch(/^bikesim-DEMO-2026-09-11-Valley-coast-climb-.*\.fit$/);
   });
   it('closes recovered open timers at the saved checkpoint and preserves final distance', () => {
@@ -110,6 +112,12 @@ describe('Strava FIT activity export', () => {
         s.samples[0].cadence = 255;
       },
       (s: ReturnType<typeof exportSession>) => {
+        s.samples[0].grade = NaN;
+      },
+      (s: ReturnType<typeof exportSession>) => {
+        s.samples[0].grade = -31;
+      },
+      (s: ReturnType<typeof exportSession>) => {
         s.timerEvents![1].elapsed = 50;
       },
     ]) {
@@ -118,6 +126,14 @@ describe('Strava FIT activity export', () => {
       expect(fitExportIssue(s)).toBeTruthy();
       expect(() => sessionFit(s)).toThrow();
     }
+  });
+  it('preserves signed fractional route grade to FIT precision', () => {
+    const s = exportSession();
+    s.samples[1].grade = -0.26584;
+    s.samples[4].grade = 0.125;
+    const m = decode(sessionFit(s));
+    expect(m.recordMesgs[2].grade).toBeCloseTo(-0.27, 2);
+    expect(m.recordMesgs.at(-1)?.grade).toBeCloseTo(0.13, 2);
   });
   it('records real timing, pause boundaries and a partial final sample in new rides', () => {
     vi.useFakeTimers({ toFake: ['Date'] });

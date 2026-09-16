@@ -18,12 +18,13 @@ Still air is the default. Rolling coefficient, wind coefficient (kg/m), and effi
 The engine samples terrain along the traveled path at intervals no longer than 50 ms and integrates forces in steps no longer than 10 ms. It resolves a stop within a step so an uphill coast cannot add distance after reaching zero. Speed is forward-only, with a numerical ceiling of 150 km/h. Backward rolling and rider braking are not modeled yet.
 
 - Downhill: gravity can exceed rolling/air resistance. Zero watts can accelerate from rest and accumulate distance until drag balances gravity.
+- A shallow descent can still slow a moving rider: the force balance, not just the negative grade sign, determines acceleration. At the default 79 kg total mass and still air, −0.5% has a constant-grade coasting equilibrium around 7.5 km/h; −3% around 38 km/h. Entering faster slows you toward that balance. Shallower than roughly −0.4% cannot sustain forward coasting against the assumed rolling resistance.
 - Flat: zero watts retains momentum, then drag and rolling resistance reduce speed.
 - Uphill: zero watts retains momentum briefly, but climbing consumes it faster. The bike stops progressively.
 - Fresh zero power/cadence is valid live data. Stale power pauses the ride; it is not interpreted as coasting.
 - Explicit Pause freezes progress and resets speed. Resume requires a countdown; this differs from leaving the pedals still.
 
-The scene follows the physics engine's distance rather than accumulating separate render-frame distance. The HUD identifies coasting and shows virtual wheel rotation. Sessions retain mass, wheel setup, and `physicsVersion: 2` in exports/backups.
+The scene follows the physics engine's distance rather than accumulating separate render-frame distance. The HUD derives its coasting trend from the integrator's shared force calculation, distinguishing acceleration, drag-limited balance and slowing even on descents. Sessions retain mass, wheel setup, and `physicsVersion: 2` in JSON exports/backups; FIT includes signed virtual route grade.
 
 ## Wheel size and physical gears
 
@@ -35,7 +36,7 @@ Circumference converts virtual speed to virtual wheel RPM. It does not multiply 
 
 The explicitly armed SIM controller sends slope, still-air wind, rolling coefficient 0.004, and wind coefficient 0.18, limited to ±1% and 0.25 percentage-point changes per second. It powers both the manual diagnostic and automatic Valley warm-up riding in the opt-in build. Flat startup is road load, not unloading. SIM does not prescribe watts or require pedaling during coasting.
 
-FTMS simulation parameters contain no rider-mass or wheel-size field ([Bluetooth SIG test specification](https://files.bluetooth.com/wp-content/uploads/dlm_uploads/2024/10/FTMS.TS_.p6.pdf)). BikeSIM Settings does not rewrite Wahoo's trainer profile. Before control starts, the rider verifies that profile and ends Wahoo control. Exported setup values record confirmed app settings, not trainer profile readback. The rider confirmed BikeSIM's physical slope response on September 11. Cross-app profile persistence and the complete controlled ride lifecycle remain [hardware checks](HARDWARE_TESTS.md).
+FTMS simulation parameters contain no rider-mass or wheel-size field ([Bluetooth SIG test specification](https://files.bluetooth.com/wp-content/uploads/dlm_uploads/2024/10/FTMS.TS_.p6.pdf)). BikeSIM Settings does not rewrite Wahoo's trainer profile. Before control starts, the rider verifies that profile and ends Wahoo control. Exported setup values record confirmed app settings, not trainer profile readback. The rider confirmed BikeSIM's physical slope response on September 11 and completed automatic Valley warm-up on September 16. Cross-app profile persistence, pause/resume and fault recovery remain [hardware checks](HARDWARE_TESTS.md).
 
 The opt-in build supports controlled roads whose full profile stays within ±1%; steeper routes remain demo/read-only previews, without clamping physical grade to a different hill. The controller follows the same distance-based grade as the physics engine; the HUD exposes the last acknowledged slope because rate limiting and acknowledgement delays can temporarily lag the route. Startup/resume applies flat SIM before the countdown. Virtual downhill motion can continue while the physical flywheel slows; gravity in the game does not promise to motor-drive a trainer.
 

@@ -1,5 +1,11 @@
 # Hardware validation log
 
+## September 16 — automatic Valley completion confirmed
+
+The rider completed the 3 km Valley warm-up using automatic SIM terrain, reported realistic resistance and live data, and supplied the downloaded FIT. Official Garmin decoding confirms file integrity, 476.6 seconds of riding and continued distance during zero-watt coasts. See the [ride review](VALLEY_RIDE_REVIEW.md) for measurements and inferred slopes. The observed shallow-downhill slowdown is consistent with rolling/air drag exceeding gravity.
+
+This establishes the complete start-to-finish ride and export flow on the physical setup. It does not establish mid-ride pause/resume (the FIT contains no pause), physical load after Stop, connection-loss recovery or Strava import. Those portions of the protocol below remain pending. No additional physical trainer commands were sent during development.
+
 ## September 12 — next check: controlled Valley warm-up ride
 
 Automatic SIM road control is implemented in the opt-in build. Software tests use synthetic GATT; development tools have not started a physical ride. Use this check when ready; no further ERG test is needed first.

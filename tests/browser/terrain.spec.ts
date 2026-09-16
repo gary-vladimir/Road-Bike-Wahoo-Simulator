@@ -79,11 +79,19 @@ test('confirmed profile is editable and the downhill demo coasts at zero watts',
   await waitForInitialRide(page);
   await page.getByRole('button', { name: 'Coast', exact: true }).click();
   await expect(page.getByLabel('Motion status')).toContainText('Coasting · 0 W');
+  await expect(page.getByLabel('Motion status')).toContainText('Gaining speed');
+  await expect(page.getByLabel('Motion status')).toContainText(
+    'Gravity exceeds rolling and air drag.',
+  );
   const distance = () => page.locator('.ride-metrics').innerText();
   // The display rounds to 10 m; gravity needs more than five seconds to cross 5 m from rest.
   await expect.poll(distance, { timeout: 15000 }).not.toContain('0.00 km ridden');
   await expect(page.locator('.power-metric strong')).toHaveText('0W');
   await page.screenshot({ path: 'test-results/downhill-coasting.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.coasting-trend')).toBeVisible();
+  await expect(page.locator('.coasting-trend')).toHaveText('Gaining speed');
+  await page.screenshot({ path: 'test-results/downhill-coasting-mobile.png', fullPage: true });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await page.getByRole('button', { name: 'Finish & save ride' }).click();
   await expect(page.getByRole('heading', { name: 'Your ride, recorded.' })).toBeVisible();

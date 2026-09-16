@@ -22,9 +22,12 @@ The exporter uses Garmin's official `@garmin/fitsdk` version 21.214.0. It is loa
 | Available cadence          | Record rpm; missing cadence stays absent                                |
 | Virtual distance           | Cumulative record and summary meters, converted from km                 |
 | Virtual speed              | Record m/s, converted from km/h; average/max speed summary              |
+| Virtual route grade        | Signed record grade in percent at FIT 0.01% precision; route rides only |
 | Road/workout mode          | Cycling + virtual activity / indoor cycling sub-sport                   |
 
 There are no fabricated GPS coordinates, outdoor altitude, heart rate, calories, or workout-target watts presented as measured power. Strava derives its own averages and may classify or display the activity differently. The procedural environment does not supply a real geographic route.
+
+Signed grade was added September 16. It describes the recorded virtual road, not acknowledged trainer slope; decorative workout hills are excluded. Strava may not display this field. The rider's first completed Valley FIT passed Garmin decoding and integrity checks, with genuine zero-watt coasting distance; manual Strava import remains unconfirmed.
 
 ## Recording and compatibility
 

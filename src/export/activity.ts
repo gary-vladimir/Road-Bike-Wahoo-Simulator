@@ -55,6 +55,7 @@ export function fitExportIssue(s: Session): string | null {
       sample.power > 65534 ||
       sample.speed < 0 ||
       sample.speed > 150 ||
+      (s.route && (!Number.isFinite(sample.grade) || Math.abs(sample.grade) > 30)) ||
       sample.distance < previousDistance ||
       sample.distance > s.distance + 0.00001 ||
       (sample.cadence !== undefined &&

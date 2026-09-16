@@ -51,6 +51,8 @@ export function sessionFit(s: Session): Uint8Array {
       power: Math.round(sample.power),
     };
     if (sample.cadence !== undefined) record.cadence = Math.round(sample.cadence);
+    // Virtual road slope, not trainer readback or a decorative workout hill.
+    if (s.route) record.grade = sample.grade;
     records.set(timestamp.getTime(), { at, data: record });
   }
   const end = date(timeline.end);

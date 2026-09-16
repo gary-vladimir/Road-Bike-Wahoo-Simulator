@@ -5,10 +5,45 @@ import {
   routePosition,
   validateRoute,
   advanceRoad,
+  roadForces,
+  coastStatus,
 } from '../../src/ride/terrain';
 import { RideEngine } from '../../src/ride/engine';
 import { routeWorkout } from '../../src/ui/RoadSetup';
 describe('distance-based SIM road and free pacing', () => {
+  it('slows on a shallow descent while still covering distance at zero watts', () => {
+    // September 16 Valley coast: about 26 km/h at -0.27% to -0.22%.
+    let speed = 26,
+      distance = 0;
+    for (let t = 0; t < 8; t++) {
+      const step = advanceRoad(speed, 0, -0.25, 70, 9, 1);
+      speed = step.speed;
+      distance += step.distance;
+    }
+    expect(speed).toBeGreaterThan(22);
+    expect(speed).toBeLessThan(23);
+    expect(distance).toBeGreaterThan(0.053);
+    expect(distance).toBeLessThan(0.055);
+    expect(coastStatus(26, -0.25, 70, 9)).toMatchObject({ trend: 'Slowing down' });
+    const forces = roadForces(26, 0, -0.25, 70, 9);
+    expect(forces.gravity).toBeGreaterThan(0);
+    expect(forces.gravity).toBeLessThan(forces.air + forces.rolling);
+    expect(forces.acceleration).toBeLessThan(0);
+  });
+  it('can accelerate or decelerate on the same descent depending on entry speed', () => {
+    expect(advanceRoad(10, 0, -3, 70, 9, 1).speed).toBeGreaterThan(10);
+    expect(advanceRoad(50, 0, -3, 70, 9, 1).speed).toBeLessThan(50);
+    expect(coastStatus(10, -3, 70, 9).trend).toBe('Gaining speed');
+    expect(coastStatus(50, -3, 70, 9).trend).toBe('Slowing down');
+    expect(coastStatus(38.08, -3, 70, 9).trend).toBe('Steady speed');
+  });
+  it('distinguishes a downhill start from a stopped bike on flat or very shallow terrain', () => {
+    expect(coastStatus(0, -3, 70, 9).trend).toBe('Gaining speed');
+    for (const grade of [-0.25, 0, 3]) {
+      expect(coastStatus(0, grade, 70, 9).trend).toBe('Stopped');
+      expect(advanceRoad(0, 0, grade, 70, 9, 1)).toEqual({ speed: 0, distance: 0 });
+    }
+  });
   it('coasts downhill for distance at zero power and reaches drag-limited speed', () => {
     let speed = 0,
       distance = 0;

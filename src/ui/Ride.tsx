@@ -17,7 +17,7 @@ import { clock, position, totalSeconds } from '../workouts/model';
 import { RideEngine, type Session } from '../ride/engine';
 import { trainer } from '../trainer/bluetooth';
 import { saveSession } from '../storage/store';
-import { routeLength, routePosition } from '../ride/terrain';
+import { coastStatus, routeLength, routePosition } from '../ride/terrain';
 import TerrainProfile from './TerrainProfile';
 import { stockWheel, virtualWheelRpm } from '../ride/bike';
 import { RoadControl } from '../ride/road-control';
@@ -129,6 +129,12 @@ export default function Ride({
     next = engine.session.workout.blocks[current.index + 1];
   const route = engine.session.route;
   const terrain = route ? routePosition(route, state.distance * 1000) : null;
+  const coast = coastStatus(
+    state.speed,
+    state.grade,
+    engine.session.mass,
+    engine.session.bikeMass ?? 9,
+  );
   const pause = () => {
     engine.pause();
     setState({ ...engine.state });
@@ -271,18 +277,17 @@ export default function Ride({
               {state.phase !== 'running'
                 ? 'Ride paused'
                 : state.power === 0
-                  ? state.speed > 0.1
-                    ? 'Coasting · 0 W'
-                    : 'Stopped · pedal to move'
+                  ? coast.trend === 'Stopped'
+                    ? 'Stopped · pedal to move'
+                    : 'Coasting · 0 W'
                   : 'Pedaling'}
             </strong>
+            {state.phase === 'running' && state.power === 0 && coast.trend !== 'Stopped' && (
+              <em className="coasting-trend">{coast.trend}</em>
+            )}
             <span>
-              {state.phase === 'running' && state.power === 0 && state.speed > 0.1
-                ? state.grade < -0.4
-                  ? 'Gravity and momentum carry you.'
-                  : state.grade > 0
-                    ? 'Climbing uses your momentum.'
-                    : 'Rolling and air drag slow you.'
+              {state.phase === 'running' && state.power === 0
+                ? coast.explanation
                 : 'Road speed follows power, gravity, and momentum.'}
             </span>
             <small>

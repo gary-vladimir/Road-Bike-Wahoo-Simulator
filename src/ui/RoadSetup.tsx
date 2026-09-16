@@ -191,7 +191,7 @@ export default function RoadSetup({
           </button>
           <p className="fine-print">
             {controlled
-              ? 'Valley warm-up uses the tested slope range. The complete ride lifecycle still needs a physical check. Fresh zero-watt telemetry permits coasting.'
+              ? 'Valley warm-up completion is rider-verified. Pause/resume and fault recovery still need physical checks. Fresh zero-watt telemetry permits coasting.'
               : 'Demo and live previews send no trainer commands.'}
           </p>
           <p className="fine-print">
@@ -199,6 +199,15 @@ export default function RoadSetup({
             and {wheelLabel(settings.wheel ?? stockWheel)} tires in Settings. No gear-position
             sensor is assumed.
           </p>
+          <details className="fine-print">
+            <summary>How downhill coasting works</summary>
+            <p>
+              Your virtual bike keeps moving at 0 W. A gentle descent can still slow you when air
+              and rolling drag exceed gravity; a steeper descent can accelerate you. KICKR CORE
+              reduces braking for descents, but does not motor-drive the flywheel. Virtual speed and
+              distance can increase even while the trainer slows down.
+            </p>
+          </details>
         </aside>
       </div>
     </main>
