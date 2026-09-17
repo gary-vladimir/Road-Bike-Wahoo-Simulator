@@ -6,7 +6,7 @@ import {
 } from '../trainer/control';
 import { roadPhysics } from '../ride/terrain';
 import type { Telemetry } from '../trainer/ftms';
-/** Bounded SIM controller. Real hardware uses only the separately armed ±1% pilot. */
+/** Bounded SIM controller; the caller supplies the road or diagnostic slope envelope. */
 export class SimulationSupervisor {
   state: 'idle' | 'waiting' | 'arming' | 'running' | 'stopping' | 'stopped' | 'faulted' = 'idle';
   stopConfirmed = false;

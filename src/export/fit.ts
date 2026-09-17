@@ -9,9 +9,11 @@ import {
   type SessionMesg,
   type EventMesg,
   type LapMesg,
+  type WorkoutMesg,
 } from '@garmin/fitsdk';
 import type { Session } from '../ride/engine';
 import { activityTimeline, fitExportIssue } from './activity';
+import { activityPresentation, fitText } from './presentation';
 
 // FIT timestamps have whole-second precision. Use UTC explicitly; never export local times as UTC.
 const date = (milliseconds: number) => new Date(Math.floor(milliseconds / 1000) * 1000);
@@ -31,8 +33,17 @@ export function sessionFit(s: Session): Uint8Array {
     productName: name,
     timeCreated: date(timeline.start),
   });
-  const subSport = s.mode === 'sim' || s.route ? 'virtualActivity' : 'indoorCycling';
+  // The rider requested indoor cycling classification, including procedural SIM roads.
+  const subSport = 'indoorCycling';
+  const presentation = activityPresentation(s);
   write<SportMesg>(Profile.MesgNum.SPORT, { sport: 'cycling', subSport, name });
+  write<WorkoutMesg>(Profile.MesgNum.WORKOUT, {
+    sport: 'cycling',
+    subSport,
+    numValidSteps: 0,
+    wktName: fitText(presentation.title),
+    wktDescription: fitText(presentation.description),
+  });
 
   // Last observation wins within the same FIT second. Do not manufacture zero cadence
   // when the sensor did not provide cadence. Preserve genuine zero-watt coast records.
@@ -104,7 +115,7 @@ export function sessionFit(s: Session): Uint8Array {
     eventType: 'stop',
     firstLapIndex: 0,
     numLaps: 1,
-    sportProfileName: `${name} - ${s.workout.name}`.slice(0, 80),
+    sportProfileName: fitText(presentation.title),
   });
   write<ActivityMesg>(Profile.MesgNum.ACTIVITY, {
     timestamp: end,

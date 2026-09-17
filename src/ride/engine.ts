@@ -90,7 +90,7 @@ export class RideEngine {
       options?.trainerControl &&
       (source !== 'bluetooth' || !options.route || !supportsRoadControl(options.route))
     )
-      throw new Error('This road is outside the supported trainer-control range (−1% to +1%).');
+      throw new Error('This road is outside the supported trainer-control range (−4% to +5%).');
     const bikeMass = options?.bikeMass ?? 9;
     validateWheel(options?.wheel ?? stockWheel);
     if (!Number.isFinite(bikeMass) || bikeMass < 4 || bikeMass > 30)

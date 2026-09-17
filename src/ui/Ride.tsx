@@ -47,7 +47,7 @@ export default function Ride({
   const arm = () => {
     const controller = new RoadControl(
       engine,
-      (changed) => ErgPilot.prepare(trainer.getPilotDevice('sim'), changed, 'sim'),
+      (changed) => ErgPilot.prepare(trainer.getPilotDevice('sim'), changed, 'sim', 'road'),
       refresh,
     );
     control.current = controller;

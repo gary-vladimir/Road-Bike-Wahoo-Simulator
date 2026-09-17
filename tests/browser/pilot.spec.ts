@@ -121,9 +121,13 @@ test('controlled road requires readiness, supports coasting, resumes explicitly 
   await page.getByRole('checkbox', { name: /I’m ready for a SIM road ride/ }).check();
   await page.getByRole('button', { name: /Rolling foothills/ }).click();
   await expect(start).toBeDisabled();
-  await expect(page.getByRole('alert')).toContainText('exceeds the tested');
+  await expect(
+    page.getByRole('checkbox', { name: /I’m ready for a SIM road ride/ }),
+  ).not.toBeChecked();
+  await expect(page.getByText(/This road ranges from -3.5% to \+4%/)).toBeVisible();
+  await page.getByRole('checkbox', { name: /I’m ready for a SIM road ride/ }).check();
+  await expect(start).toBeEnabled();
   expect(await roadWrites(page)).toEqual([]);
-  await page.getByRole('button', { name: /Valley warm-up/ }).click();
   await start.click();
   await expect(page.getByLabel('Trainer control status')).toContainText('Terrain control active');
   await waitForInitialRide(page);

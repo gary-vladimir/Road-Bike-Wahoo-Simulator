@@ -2,6 +2,7 @@ import { ControlQueue, type AuditEntry, type ControlWire } from './control';
 import { PowerSupervisor, type PilotState } from '../safety/supervisor';
 import type { Telemetry } from './ftms';
 import { SimulationSupervisor } from '../safety/simulation';
+import { diagnosticControlRange, roadControlRange } from '../ride/control-range';
 export type PilotSnapshot = {
   state: PilotState;
   applied: number;
@@ -109,6 +110,7 @@ export class ErgPilot {
     private release: () => void,
     private changed: (s: PilotSnapshot) => void,
     private mode: 'erg' | 'sim',
+    private scope: 'diagnostic' | 'road',
   ) {
     this.point = point;
     this.status = status;
@@ -129,7 +131,9 @@ export class ErgPilot {
     const limits = {
       ...source.range,
       ceiling: 100,
-      ...(mode === 'sim' ? { simulation: { minGrade: -1, maxGrade: 1 } } : {}),
+      ...(mode === 'sim'
+        ? { simulation: scope === 'road' ? roadControlRange : diagnosticControlRange }
+        : {}),
     };
     this.queue = new ControlQueue(wire, limits);
     this.target = mode === 'sim' ? 0 : 50;
@@ -142,7 +146,9 @@ export class ErgPilot {
     source: PilotDevice,
     changed: (s: PilotSnapshot) => void,
     mode: 'erg' | 'sim' = 'erg',
+    scope: 'diagnostic' | 'road' = 'diagnostic',
   ): Promise<ErgPilot> {
+    if (scope === 'road' && mode !== 'sim') throw new Error('Road control requires SIM mode.');
     if (import.meta.env.VITE_TRAINER_CONTROL !== 'pilot')
       throw new Error('Hardware control is disabled in this build.');
     if (document.hidden) throw new Error('Keep the trainer test tab visible.');
@@ -156,7 +162,7 @@ export class ErgPilot {
         status = await service.getCharacteristic(0x2ada);
       if (!point.properties.write || !point.properties.indicate)
         throw new Error('The trainer must support acknowledged control writes and indications.');
-      pilot = new ErgPilot(source, point, status, release, changed, mode);
+      pilot = new ErgPilot(source, point, status, release, changed, mode, scope);
       await point.startNotifications();
       status.addEventListener('characteristicvaluechanged', pilot.machineStatus);
       await status.startNotifications();
@@ -258,8 +264,14 @@ export class ErgPilot {
     this.emit();
   }
   setGrade(grade: number) {
-    if (this.mode !== 'sim' || !Number.isFinite(grade) || grade < -1 || grade > 1)
-      throw new Error('The supervised SIM test is limited to −1% through +1%.');
+    const range = this.scope === 'road' ? roadControlRange : diagnosticControlRange;
+    if (
+      this.mode !== 'sim' ||
+      !Number.isFinite(grade) ||
+      grade < range.minGrade ||
+      grade > range.maxGrade
+    )
+      throw new Error(`SIM control is limited to ${range.minGrade}% through +${range.maxGrade}%.`);
     if (this.disposed || this.shutdown || this.supervisor.state !== 'running') return;
     this.target = grade;
     this.emit();

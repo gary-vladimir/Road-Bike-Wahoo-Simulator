@@ -1,10 +1,13 @@
 import type { RideEngine } from './engine';
 import { routePosition, validateRoute, type Route } from './terrain';
 import type { PilotSnapshot } from '../trainer/pilot';
+import { roadControlRange } from './control-range';
 
 export function supportsRoadControl(route: Route) {
   validateRoute(route);
-  return route.points.every((point) => Math.abs(point.grade) <= 1);
+  return route.points.every(
+    (point) => point.grade >= roadControlRange.minGrade && point.grade <= roadControlRange.maxGrade,
+  );
 }
 type Adapter = {
   start: (readiness: {
@@ -37,7 +40,7 @@ export class RoadControl {
       !engine.session.route ||
       !supportsRoadControl(engine.session.route)
     )
-      throw new Error('Trainer-controlled roads must stay between −1% and +1%.');
+      throw new Error('Trainer-controlled roads must stay between −4% and +5%.');
   }
   start() {
     if (this.pending || this.cancelled) return this.pending ?? Promise.resolve();

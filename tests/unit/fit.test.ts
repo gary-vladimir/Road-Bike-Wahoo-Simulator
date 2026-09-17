@@ -39,13 +39,22 @@ describe('Strava FIT activity export', () => {
     expect(m.activityMesgs).toHaveLength(1);
     expect(m.sessionMesgs[0]).toMatchObject({
       sport: 'cycling',
-      subSport: 'virtualActivity',
+      subSport: 'indoorCycling',
       totalTimerTime: 10,
       totalElapsedTime: 20,
       totalDistance: 30,
     });
     expect(m.sessionMesgs[0].startTime).toEqual(new Date('2026-09-11T14:00:00Z'));
     expect(m.sessionMesgs[0].timestamp).toEqual(new Date('2026-09-11T14:00:20Z'));
+    expect(m.sessionMesgs[0].sportProfileName).toBe('BikeSIM - Valley coast & climb');
+    expect(m.sportMesgs?.[0].subSport).toBe('indoorCycling');
+    expect(m.lapMesgs[0].subSport).toBe('indoorCycling');
+    expect(m.workoutMesgs?.[0]).toMatchObject({
+      wktName: 'BikeSIM - Valley coast & climb',
+      subSport: 'indoorCycling',
+      numValidSteps: 0,
+    });
+    expect(m.workoutMesgs?.[0].wktDescription).toContain('Indoor cycling in BikeSIM.');
     expect(m.eventMesgs.map((e) => e.eventType)).toEqual(['start', 'stopAll', 'start', 'stopAll']);
     expect(m.recordMesgs.map((r) => r.power)).toEqual([undefined, 150, 0, 0, 100, 120]);
     expect(m.recordMesgs.map((r) => r.grade)).toEqual([undefined, 0, -3, -3, 1, 1]);

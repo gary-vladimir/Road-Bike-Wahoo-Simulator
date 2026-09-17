@@ -55,6 +55,24 @@ test('saved live ride downloads valid FIT with coasting and pauses, without uplo
     totalDistance: 30,
   });
   expect(m.recordMesgs?.filter((r) => r.power === 0)).toHaveLength(2);
+  expect(m.sessionMesgs?.[0].subSport).toBe('indoorCycling');
+  expect(m.workoutMesgs?.[0].wktName).toBe('BikeSIM - Valley coast & climb');
+  await page.getByText('Title and description for Strava', { exact: true }).click();
+  await expect(page.getByLabel('Activity title', { exact: true })).toHaveValue(
+    'BikeSIM - Valley coast & climb',
+  );
+  await expect(page.getByLabel('Activity description', { exact: true })).toHaveValue(
+    /0.03 km virtual distance/,
+  );
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: 'Copy title', exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    'BikeSIM - Valley coast & climb',
+  );
+  await page.getByRole('button', { name: 'Copy description', exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
+    'Indoor cycling in BikeSIM.',
+  );
   expect(m.eventMesgs?.map((e) => e.eventType)).toEqual(['start', 'stopAll', 'start', 'stopAll']);
   await page.screenshot({ path: 'test-results/fit-summary-desktop.png', fullPage: true });
   await page.reload();
@@ -64,6 +82,8 @@ test('saved live ride downloads valid FIT with coasting and pauses, without uplo
   await page.getByRole('button', { name: 'Download FIT for Strava' }).click();
   expect((await readFit(await again)).bytes).toEqual(bytes);
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByText('Title and description for Strava', { exact: true }).click();
+  await expect(page.getByLabel('Activity description', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Download FIT for Strava' }).scrollIntoViewIfNeeded();
   await expect(page.getByRole('button', { name: 'Download FIT for Strava' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(

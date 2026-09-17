@@ -1,6 +1,6 @@
 # BikeSIM
 
-A local, single-rider cycling simulator for the existing road bike and KICKR CORE 2. SIM road riding is the default experience, with four procedural Oaxaca-inspired routes, free pacing, elevation profiles, and coasting physics. ERG power workouts have their own library with eight presets and an editor. Rides save locally and export FIT activities for manual Strava upload. The opt-in control build supports automatic SIM terrain on Valley warm-up; the default build supports demo and read-only Bluetooth riding.
+A local, single-rider cycling simulator for the existing road bike and KICKR CORE 2. SIM road riding is the default experience, with four procedural Oaxaca-inspired routes, free pacing, elevation profiles, and coasting physics. ERG power workouts have their own library with eight presets and an editor. Rides save locally and export FIT activities for manual Strava upload. The opt-in control build supports automatic SIM terrain on all four current roads; the default build supports demo and read-only Bluetooth riding.
 
 ## Run locally — Docker only
 
@@ -38,7 +38,9 @@ For a structured power workout:
 2. Click **Download FIT for Strava** on its summary.
 3. Click **Open Strava file upload**, select the `.fit` file, review the activity, and save it in Strava.
 
-The file includes recording timestamps, active duration, pause events, power (including zero-watt coasting), available cadence, and virtual speed/distance. It is an indoor/virtual cycling **activity**, not a workout prescription or GPS course. New rides preserve actual pause durations; older rides use their saved start and active-time timeline because pause durations were not recorded. Recovered rides export up to their last saved checkpoint. Empty rides cannot export FIT. Demo files and their summary are clearly marked as simulated data.
+The file includes recording timestamps, active duration, pause events, power (including zero-watt coasting), available cadence, and virtual speed/distance. It is explicitly marked as an indoor cycling **activity**, not a workout prescription or GPS course. New rides preserve actual pause durations; older rides use their saved start and active-time timeline because pause durations were not recorded. Recovered rides export up to their last saved checkpoint. Empty rides cannot export FIT. Demo files and their summary are clearly marked as simulated data.
+
+The export panel also offers a matching title and description to copy into Strava if its importer ignores the embedded FIT text.
 
 Generation happens locally and needs no Strava account connection or API credentials. BikeSIM does not upload anything automatically. Strava supports manual FIT import; final classification and derived statistics are determined by Strava. No GPS route, heart rate, or calorie estimate is invented. See [export details and verification](docs/STRAVA_EXPORT.md).
 
@@ -54,7 +56,7 @@ Live power workouts still require your known FTP. Their targets are guidance. Vi
 
 In the opt-in control build below, **Ride → Valley warm-up → KICKR · automatic SIM terrain** connects the tested SIM controller to route distance. Confirm readiness and matching Wahoo profile, then select **Start SIM road ride**. Startup applies flat SIM before the countdown; after that, slope follows terrain while you shift naturally. The HUD distinguishes visual grade from the last acknowledged trainer slope. Pause, Stop, keyboard Stop, lost visibility, and telemetry/control faults end control. Resume explicitly starts a fresh control session; Finish waits for shutdown before opening the saved summary. Session JSON includes acknowledged slope transitions and control outcomes in its events.
 
-Controlled roads must remain inside the tested −1% to +1% range; other routes are available as previews, without silently reducing their physical slopes. The full physical ride lifecycle still needs the rider's check. Automatic ERG workout control and Wi-Fi transport remain unavailable. See [hardware validation](docs/HARDWARE_TESTS.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+All four current routes support automatic SIM, including Rolling foothills (−3.5% to +4%). Road control uses a bounded −4% to +5% envelope with 0.25 percentage-point steps no more than once per second. Selecting a different route clears readiness and shows its slope range. Valley completion and SIM pause/resume are rider-confirmed; steeper terrain is newly enabled, and fault recovery remains a physical check. The separate diagnostic test stays at ±1%. Automatic ERG workout control and Wi-Fi transport remain unavailable. See [hardware validation](docs/HARDWARE_TESTS.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Supervised SIM and ERG pilots
 
@@ -99,4 +101,4 @@ docker compose -f .devcontainer/compose.yaml stop
 
 No accounts, analytics, remote fonts, CDN assets, or automatic uploads. The app runs without internet after setup; development dependencies require internet to install. Local storage is browser-profile storage, not app-level encryption. Download a backup in Settings before clearing browser data or changing browser/profile/origin. Imports merge IDs; matching records are replaced transactionally. A refreshed/closed ride is listed as interrupted and never restarts automatically.
 
-The scene is a procedural environment, not a surveyed Oaxaca route. Route grade affects virtual speed and the scene; route-driven physical resistance awaits the separate SIM test. Route sessions retain their profile, SIM mode, mass, wheel setup, and physics version in history/backups; their recorded target watts are zero to represent no power prescription. Real GPX routes, detailed Blender assets, and automatic training prescriptions remain future work. Strava transfer uses the manual FIT file workflow above.
+The scene is a procedural environment, not a surveyed Oaxaca route. Route grade affects virtual speed and the scene; automatic SIM controls physical resistance within the road envelope in the opt-in build. Route sessions retain their profile, SIM mode, mass, wheel setup, and physics version in history/backups; their recorded target watts are zero to represent no power prescription. Real GPX routes, detailed Blender assets, and automatic training prescriptions remain future work. Strava transfer uses the manual FIT file workflow above.

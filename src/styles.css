@@ -996,6 +996,19 @@ h1 {
   font-style: normal;
   color: #d9eadc;
 }
+.export-presentation {
+  margin-top: 20px;
+}
+.export-presentation label {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 8px;
+}
+.export-presentation input,
+.export-presentation textarea {
+  width: 100%;
+  min-width: 0;
+}
 .coasting-state span {
   font-size: 10px;
   line-height: 1.4;

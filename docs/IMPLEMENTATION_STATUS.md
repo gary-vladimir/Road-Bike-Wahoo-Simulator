@@ -1,5 +1,15 @@
 # Implementation status and decisions
 
+## September 17 — indoor exports and full catalog SIM control
+
+The rider confirmed SIM pause/resume and successful manual Strava import. Automatic SIM now supports all four existing roads inside −4% to +5%, including Rolling foothills. The road adapter has an explicit scope separate from the ±1% diagnostic adapter; both retain the same ramp, acknowledgement, telemetry, visibility and Stop protections. Route changes clear readiness and display the selected grade range. This supersedes the earlier ±1% road restriction without claiming physical validation of higher grades or connection-loss recovery.
+
+FIT files now consistently declare cycling/indoorCycling in sport, workout, lap and session messages. They retain virtual speed/distance and signed grade. Standard workout metadata stores a generated BikeSIM title and a short description, bounded by UTF-8 byte length. The summary/history export panel offers the complete title and description with copy buttons and selectable-text fallback. Text distinguishes completed, stopped, recovered and demo activities and uses recorded distance/time rather than planned totals.
+
+Strava documents sport/sub-sport recognition, but not importing FIT workout title/description as activity text. The manual workflow therefore provides copyable text; no automatic account connection or upload was added. The new indoor classification still needs a new-file import check in Strava. Original session data and identity timestamps remain unchanged.
+
+Verification: 101 unit tests pass, including signed higher-grade ramps, catalog limits, unchanged diagnostic bounds, stale-data Stop, indoor FIT classification, Unicode field bounds and truthful partial/demo descriptions. Both build configurations compile. Six affected browser workflows pass across the run and the corrected export-field-label rerun, covering Rolling foothills readiness/start/pause/resume/Stop, cancellation, the separate SIM diagnostic, new/history FIT downloads and empty activity handling. Clipboard text and desktop/mobile export layout were verified. Existing large-bundle warnings remain; no physical trainer commands or Strava uploads were sent by the tools.
+
 ## September 16 — real ride evidence and clearer coasting
 
 Automatic Valley warm-up completion, terrain feel and FIT download are now rider-confirmed. The supplied file passes Garmin integrity/decoding checks: 3 km, 7:56.6, with moving zero-watt records. Its longest coast continues 53.85 m while slowing from 26.00 to 22.58 km/h on an inferred roughly −0.25% descent. See the [ride review](VALLEY_RIDE_REVIEW.md).

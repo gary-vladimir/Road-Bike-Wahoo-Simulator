@@ -1,5 +1,13 @@
 # Hardware validation log
 
+## September 17 — SIM pause/resume and Strava import confirmed
+
+The rider explicitly confirmed successful SIM pause/resume and manual FIT import into Strava. This completes those outstanding checks for the tested Valley setup. Physical load after Stop, cross-app profile persistence and connection-loss recovery have not been independently characterized.
+
+Road control now supports the current catalog inside −4% to +5%, including Rolling foothills (−3.5% to +4%). Diagnostics retain ±1%; ramp limits, flat startup/resume, fresh-power guards, exclusive control and acknowledged Stop remain in place. Higher-grade behavior is software-verified, not yet rider-verified. The next ordinary ride on Rolling foothills can establish perceived slope response; no additional ERG test is required. Development tools send no physical commands.
+
+The export now marks all rides as indoor cycling and adds workout title/description metadata. The rider's confirmation applies to the prior exporter; Strava's handling of the new classification and optional text needs confirmation on a new activity, since duplicate uploads may be rejected.
+
 ## September 16 — automatic Valley completion confirmed
 
 The rider completed the 3 km Valley warm-up using automatic SIM terrain, reported realistic resistance and live data, and supplied the downloaded FIT. Official Garmin decoding confirms file integrity, 476.6 seconds of riding and continued distance during zero-watt coasts. See the [ride review](VALLEY_RIDE_REVIEW.md) for measurements and inferred slopes. The observed shallow-downhill slowdown is consistent with rolling/air drag exceeding gravity.

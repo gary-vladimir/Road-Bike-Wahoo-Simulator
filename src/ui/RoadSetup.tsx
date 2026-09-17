@@ -92,7 +92,10 @@ export default function RoadSetup({
               key={r.id}
               className={`workout-card ${r.id === route.id ? 'chosen' : ''}`}
               aria-pressed={r.id === route.id}
-              onClick={() => setRoute(r)}
+              onClick={() => {
+                setRoute(r);
+                setReady(false);
+              }}
             >
               <div className="route-cover">
                 <img src={`/scenes/${r.id}.jpg`} alt="" loading="lazy" />
@@ -162,8 +165,8 @@ export default function RoadSetup({
             <>
               {!supported && (
                 <p role="alert">
-                  This route exceeds the tested −1% to +1% range. Choose Valley warm-up for trainer
-                  control, or use a preview source.
+                  This route exceeds the supported −4% to +5% control range. Choose another road or
+                  use a preview source.
                 </p>
               )}
               <label className="source-label">
@@ -173,7 +176,9 @@ export default function RoadSetup({
                   onChange={(e) => setReady(e.target.checked)}
                 />
                 I’m ready for a SIM road ride: the current load is comfortable, other trainer apps
-                are closed, and Wahoo’s rider weight and wheel size match my BikeSIM settings.
+                are closed, and Wahoo’s rider weight and wheel size match my BikeSIM settings. This
+                road ranges from {Math.min(...route.points.map((p) => p.grade))}% to +
+                {Math.max(...route.points.map((p) => p.grade))}%.
               </label>
             </>
           )}
@@ -191,7 +196,7 @@ export default function RoadSetup({
           </button>
           <p className="fine-print">
             {controlled
-              ? 'Valley warm-up completion is rider-verified. Pause/resume and fault recovery still need physical checks. Fresh zero-watt telemetry permits coasting.'
+              ? 'Terrain changes gradually. Valley warm-up and pause/resume are rider-verified; steeper roads are newly enabled. Fresh zero-watt telemetry permits coasting.'
               : 'Demo and live previews send no trainer commands.'}
           </p>
           <p className="fine-print">

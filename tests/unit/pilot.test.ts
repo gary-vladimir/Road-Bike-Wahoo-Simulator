@@ -124,25 +124,31 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe('controlled road lifecycle with synthetic GATT', () => {
-  function road() {
+  function road(route = routes[0]) {
     const f = fixture();
     const engine = new RideEngine(presets[0], 'bluetooth', null, 70, {
-      route: routes[0],
+      route,
       trainerControl: 'sim',
     });
     const control = new RoadControl(
       engine,
-      (changed) => ErgPilot.prepare(f.source, changed, 'sim'),
+      (changed) => ErgPilot.prepare(f.source, changed, 'sim', 'road'),
       () => {},
     );
     return { ...f, engine, control };
   }
-  it('rejects steeper routes instead of silently clamping terrain', () => {
-    expect(routes.map(supportsRoadControl)).toEqual([true, false, false, false]);
+  it('supports the catalog but rejects terrain beyond the road envelope instead of clamping', () => {
+    expect(routes.map(supportsRoadControl)).toEqual([true, true, true, true]);
     expect(
       () =>
         new RideEngine(presets[0], 'bluetooth', null, 70, {
-          route: routes[1],
+          route: {
+            ...routes[1],
+            points: [
+              { meters: 0, grade: 0 },
+              { meters: 1000, grade: 6 },
+            ],
+          },
           trainerControl: 'sim',
         }),
     ).toThrow('range');
@@ -150,6 +156,43 @@ describe('controlled road lifecycle with synthetic GATT', () => {
       () =>
         new RideEngine(presets[0], 'demo', null, 70, { route: routes[0], trainerControl: 'sim' }),
     ).toThrow('range');
+  });
+  it('ramps to foothills climbs/descents and the catalog maximum without broadening diagnostics', async () => {
+    const f = road(routes[1]);
+    f.coast();
+    await f.control.start();
+    f.engine.state.phase = 'running';
+    f.engine.state.distance = 1.6;
+    f.control.update();
+    await vi.advanceTimersByTimeAsync(17000);
+    expect(f.control.snapshot?.grade).toBe(4);
+    f.engine.state.distance = 3.2;
+    f.control.update();
+    await vi.advanceTimersByTimeAsync(31000);
+    expect(f.control.snapshot?.grade).toBe(-3.5);
+    const grades = f.writes
+      .filter((w) => w[0] === 17)
+      .map((w) => new DataView(Uint8Array.from(w).buffer).getInt16(3, true) / 100);
+    grades.slice(1).forEach((g, i) => expect(Math.abs(g - grades[i])).toBeLessThanOrEqual(0.25));
+    expect(f.writes.every((w) => w[0] !== 5)).toBe(true);
+    f.expire();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(f.engine.state.phase).toBe('paused');
+    expect(f.writes.at(-1)).toEqual([8, 1]);
+    await f.control.stop();
+    const next = fixture();
+    const pilot = await ErgPilot.prepare(next.source, () => {}, 'sim', 'road');
+    await pilot.start({ baselineConfirmed: true, trainerProfileConfirmed: true });
+    expect(() => pilot.setGrade(5.01)).toThrow('limited');
+    expect(() => pilot.setGrade(-4.01)).toThrow('limited');
+    pilot.setGrade(5);
+    await vi.advanceTimersByTimeAsync(21000);
+    expect(
+      next.writes.some(
+        (w) => w[0] === 17 && new DataView(Uint8Array.from(w).buffer).getInt16(3, true) === 500,
+      ),
+    ).toBe(true);
+    await pilot.stop();
   });
   it('follows distance through climbs and descents with zero watts allowed and no ERG writes', async () => {
     const f = road();
