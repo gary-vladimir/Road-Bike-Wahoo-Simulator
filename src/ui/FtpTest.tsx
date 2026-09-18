@@ -6,9 +6,11 @@ import { FtpControl } from '../ride/ftp-control';
 import {
   ftpProtocols,
   ftpTarget,
+  ftpRampStart,
   ftpWarmupSeconds,
   type FtpAssessment,
   type FtpProtocol,
+  type FtpStartingLoad,
 } from '../ride/ftp-test';
 import { download, loadFtpAssessments, saveFtpAssessment } from '../storage/store';
 import { clock } from '../workouts/model';
@@ -16,6 +18,7 @@ import { clock } from '../workouts/model';
 export default function FtpTest({ onClose }: { onClose: () => void }) {
   const device = useSyncExternalStore(trainer.subscribe, trainer.getSnapshot);
   const [protocol, setProtocol] = useState<FtpProtocol>('gentle');
+  const [startingLoad, setStartingLoad] = useState<FtpStartingLoad>(50);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -83,8 +86,18 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
       const c = new FtpControl(
         protocol,
         (update) =>
-          ErgPilot.prepare(source, update, 'erg', 'workout', ftpProtocols[protocol].ceiling),
+          ErgPilot.prepare(
+            source,
+            update,
+            'erg',
+            'workout',
+            ftpProtocols[protocol].ceiling,
+            startingLoad,
+          ),
         changed,
+        () => performance.now(),
+        startingLoad,
+        () => trainer.getSnapshot().telemetry,
       );
       controller.current = c;
       // Persist before preparing control, so reloads leave an interrupted attempt, never an FTP.
@@ -104,6 +117,16 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
   const ramp = (report?.elapsed ?? 0) >= ftpWarmupSeconds;
   const p = ftpProtocols[protocol];
   const ack = c?.snapshot && lastPowerAcknowledgement(c.snapshot);
+  const recent = report?.readings.filter((r) => r.end > report.elapsed - 10) ?? [];
+  const seconds = recent.reduce(
+    (sum, r) => sum + r.end - Math.max(r.start, report!.elapsed - 10),
+    0,
+  );
+  const recentMean = (field: 'power' | 'acknowledged') =>
+    recent.reduce(
+      (sum, r) => sum + (r.end - Math.max(r.start, report!.elapsed - 10)) * r[field],
+      0,
+    ) / seconds;
   return (
     <main className="content-page ftp-test">
       <div className="eyebrow">KNOW YOUR EFFORT</div>
@@ -116,9 +139,10 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
         <section className="panel settings-form">
           <h2>A guided ramp test</h2>
           <p>
-            Warm up for 5 minutes at 50 W, then follow one-minute steps until you reach your limit.
-            Stay seated, use the small front chainring and a middle rear cog, and keep a steady
-            cadence above 50 rpm.
+            Warm up for 5 minutes at {startingLoad} W, then start the ramp at{' '}
+            {ftpRampStart(protocol, startingLoad)} W and follow one-minute steps until you reach
+            your limit. Stay seated, use the small front chainring and a middle rear cog, and keep a
+            steady cadence above 50 rpm.
           </p>
           <label>
             Test protocol
@@ -134,6 +158,32 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
               <option value="standard">Standard ramp · +20 W each minute · 100–600 W</option>
             </select>
           </label>
+          <label>
+            Starting load
+            <select
+              aria-label="FTP starting load"
+              value={startingLoad}
+              onChange={(e) => {
+                setStartingLoad(Number(e.target.value) as FtpStartingLoad);
+                setReady(false);
+              }}
+            >
+              <option value={50}>50 W · very light</option>
+              <option value={75}>75 W · more pedal pressure</option>
+              <option value={100}>100 W · only if comfortably easy for you</option>
+            </select>
+          </label>
+          <p>
+            50 W can feel almost unloaded. If it is too light, choose a comfortable higher starting
+            load before starting. This is an absolute power target, not your FTP. The ramp will not
+            drop back to 50 W after warming up.
+          </p>
+          <p>
+            Keep a comfortable, steady cadence; do not speed up to chase the watts. ERG controls
+            power, so accelerating your legs makes it reduce pedal resistance. Let the flywheel slow
+            before another attempt. A larger rear cog lowers flywheel speed at the same cadence; it
+            does not add watts to an ERG target.
+          </p>
           <p>
             Gentle uses smaller steps for riders new to power training. Both tests become demanding.
             Choose a rested day, have cooling and water ready, and stop if you feel unwell.
@@ -151,7 +201,8 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
           <label>
             <input type="checkbox" checked={ready} onChange={(e) => setReady(e.target.checked)} />{' '}
             I’m ready for a demanding test, my trainer profile and current load are comfortable,
-            other trainer apps are closed, and I want a valid result to update my FTP.
+            other trainer apps are closed, I approve the {startingLoad} W starting load, and I want
+            a valid result to update my FTP.
           </label>
           <button
             className="primary"
@@ -200,7 +251,7 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
               <span>Cadence</span>
             </div>
             <div>
-              <strong>{ftpTarget(protocol, report!.elapsed)} W</strong>
+              <strong>{ftpTarget(protocol, report!.elapsed, report!.startingLoad)} W</strong>
               <span>Requested target</span>
             </div>
             <div>
@@ -208,6 +259,16 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
               <span>Acknowledged target</span>
             </div>
           </div>
+          {seconds >= 9.9 && (
+            <p aria-label="Recent ERG response">
+              Last 10 seconds: {recentMean('power').toFixed(0)} W measured /{' '}
+              {recentMean('acknowledged').toFixed(0)} W acknowledged.
+              {Math.abs(recentMean('power') - recentMean('acknowledged')) >
+              Math.max(10, recentMean('acknowledged') * 0.15)
+                ? ' Power is not tracking closely yet. Keep cadence steady; cancel and download the report if this persists.'
+                : ' Power is near the commanded load. If it still feels too light, cancel and choose a comfortable starting load.'}
+            </p>
+          )}
           <p>
             {clock(report!.elapsed)} elapsed ·{' '}
             {clock(
@@ -236,7 +297,7 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
               I’ve reached my limit
             </button>
             <button
-              className="danger"
+              className="secondary"
               disabled={c.phase === 'stopping'}
               onClick={() => void c.finish('cancel')}
             >

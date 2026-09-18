@@ -27,6 +27,13 @@ describe('FTP assessment evidence', () => {
     expect([299, 300, 360].map((t) => ftpTarget('standard', t))).toEqual([50, 100, 120]);
     expect(ftpTarget('standard', 10000)).toBe(600);
     expect(ftpDuration('gentle')).toBe(1860);
+    expect([0, 299, 300, 360].map((t) => ftpTarget('gentle', t, 75))).toEqual([75, 75, 80, 90]);
+    expect([0, 299, 300, 360].map((t) => ftpTarget('gentle', t, 100))).toEqual([
+      100, 100, 100, 110,
+    ]);
+    expect(ftpTarget('standard', 0, 75)).toBe(75);
+    expect(ftpTarget('standard', 300, 75)).toBe(100);
+    expect(ftpDuration('gentle', 75)).toBe(1680);
   });
   it('uses actual measured time-weighted power, includes partial stages and excludes warmup spikes', () => {
     const r = ftpReadings(750);
@@ -146,6 +153,8 @@ describe('FTP controller lifecycle', () => {
       await f.control.finish('effort');
       expect(f.control.report.status).toBe('invalid');
       expect(f.control.report.ftp).toBeUndefined();
+      if (fault === 'cadence') expect(f.control.report.lastTelemetry?.cadence).toBe(0);
+      expect(f.control.report.controlAudit).toBeDefined();
     },
   );
   it('does not calculate after cancellation, a ceiling, or unconfirmed Stop', async () => {

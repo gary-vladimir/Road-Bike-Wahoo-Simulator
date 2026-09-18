@@ -121,6 +121,7 @@ export class ErgPilot {
     private mode: 'erg' | 'sim',
     private scope: 'diagnostic' | 'road' | 'workout',
     powerCeiling: number,
+    startupWatts: number,
   ) {
     this.point = point;
     this.status = status;
@@ -141,13 +142,14 @@ export class ErgPilot {
     const limits: ControlLimits = (this.limits = {
       ...source.range,
       ceiling: scope === 'workout' ? powerCeiling : 100,
+      startupWatts,
       ...(scope === 'workout' ? { powerMode: 'workout' as const } : {}),
       ...(mode === 'sim'
         ? { simulation: scope === 'road' ? roadControlRange : diagnosticControlRange }
         : {}),
     });
     this.queue = new ControlQueue(wire, limits);
-    this.target = mode === 'sim' ? 0 : 50;
+    this.target = mode === 'sim' ? 0 : startupWatts;
     this.supervisor =
       mode === 'sim'
         ? new SimulationSupervisor(this.queue, limits, source.telemetry)
@@ -159,7 +161,14 @@ export class ErgPilot {
     mode: 'erg' | 'sim' = 'erg',
     scope: 'diagnostic' | 'road' | 'workout' = 'diagnostic',
     powerCeiling = 100,
+    startupWatts = 50,
   ): Promise<ErgPilot> {
+    if (
+      ![50, 75, 100].includes(startupWatts) ||
+      startupWatts > powerCeiling ||
+      (startupWatts !== 50 && (scope !== 'workout' || mode !== 'erg'))
+    )
+      throw new Error('An explicit ERG workout starting load of 50, 75 or 100 W is required.');
     if (scope === 'road' && mode !== 'sim') throw new Error('Road control requires SIM mode.');
     if (
       scope === 'workout' &&
@@ -188,7 +197,17 @@ export class ErgPilot {
         )
           throw new Error('Trainer power range cannot represent the complete workout.');
       }
-      pilot = new ErgPilot(source, point, status, release, changed, mode, scope, powerCeiling);
+      pilot = new ErgPilot(
+        source,
+        point,
+        status,
+        release,
+        changed,
+        mode,
+        scope,
+        powerCeiling,
+        startupWatts,
+      );
       await point.startNotifications();
       status.addEventListener('characteristicvaluechanged', pilot.machineStatus);
       await status.startNotifications();

@@ -17,6 +17,7 @@ export type ControlLimits = {
   increment: number;
   ceiling: number;
   powerMode?: 'workout';
+  startupWatts?: number;
   simulation?: { minGrade: number; maxGrade: number };
 };
 export function encodeControl(command: ControlCommand, limits: ControlLimits): Uint8Array {

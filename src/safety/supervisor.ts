@@ -43,7 +43,10 @@ export class PowerSupervisor {
     if (!['idle', 'waiting'].includes(this.state))
       throw new Error('A new control session is required to re-arm');
     this.guard();
-    encodeControl({ kind: 'power', watts: 50 }, this.limits);
+    const startup = this.limits.startupWatts ?? 50;
+    if (![50, 75, 100].includes(startup) || (startup !== 50 && this.limits.powerMode !== 'workout'))
+      throw new Error('Unsupported ERG starting load');
+    encodeControl({ kind: 'power', watts: startup }, this.limits);
     const generation = ++this.generation;
     this.state = 'arming';
     try {
@@ -51,7 +54,7 @@ export class PowerSupervisor {
       this.claimed = true;
       if (generation !== this.generation) return;
       this.guard();
-      await this.queue.send({ kind: 'power', watts: 50 });
+      await this.queue.send({ kind: 'power', watts: startup });
       if (generation !== this.generation) return;
       this.guard();
       await this.queue.send({ kind: 'start' });
@@ -59,7 +62,7 @@ export class PowerSupervisor {
       this.guard();
       this.state = 'running';
       this.last = this.now();
-      this.applied = 50;
+      this.applied = startup;
     } catch (error) {
       if (generation === this.generation) await this.fault((error as Error).message);
     }

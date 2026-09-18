@@ -7,6 +7,7 @@ import {
   ftpTarget,
   type FtpAssessment,
   type FtpProtocol,
+  type FtpStartingLoad,
 } from './ftp-test';
 
 type Adapter = {
@@ -27,12 +28,16 @@ export class FtpControl {
     private prepare: (changed: (s: PilotSnapshot) => void) => Promise<Adapter>,
     private changed: () => void,
     private now = () => performance.now(),
+    startingLoad: FtpStartingLoad = 50,
+    private currentTelemetry?: () => Telemetry,
   ) {
+    if (![50, 75, 100].includes(startingLoad)) throw new Error('Invalid FTP starting load.');
     this.report = {
       version: 1,
       id: crypto.randomUUID(),
       startedAt: new Date().toISOString(),
       protocol,
+      startingLoad,
       status: 'in-progress',
       elapsed: 0,
       readings: [],
@@ -70,6 +75,8 @@ export class FtpControl {
   }
   tick(t: Telemetry) {
     if (this.phase !== 'running') return;
+    // Keep the failing observation too; valid ramp readings alone hide cadence dropouts.
+    this.recordTelemetry(t);
     const now = this.now();
     const dt = (now - this.last!) / 1000;
     this.last = now;
@@ -93,28 +100,35 @@ export class FtpControl {
     ) {
       void this.finish(
         'fault',
-        'Power or cadence became unreliable. This attempt cannot set FTP; your previous FTP is unchanged.',
+        t.cadence !== undefined && t.cadence < 50
+          ? `Trainer reported ${t.cadence} rpm, below the 50 rpm ERG minimum. FTP unchanged. Download the report if you were still pedaling steadily.`
+          : 'Power or cadence became unreliable. This attempt cannot set FTP; your previous FTP is unchanged.',
       );
       return;
     }
     const start = this.report.elapsed;
-    this.report.elapsed = Math.min(ftpDuration(this.report.protocol), start + dt);
+    this.report.elapsed = Math.min(
+      ftpDuration(this.report.protocol, this.report.startingLoad),
+      start + dt,
+    );
     this.report.readings.push({
       start,
       end: this.report.elapsed,
       power: t.power!,
       cadence: t.cadence!,
-      target: ftpTarget(this.report.protocol, start),
+      target: ftpTarget(this.report.protocol, start, this.report.startingLoad),
       acknowledged: ack.watts,
     });
-    if (this.report.elapsed >= ftpDuration(this.report.protocol)) {
+    if (this.report.elapsed >= ftpDuration(this.report.protocol, this.report.startingLoad)) {
       void this.finish(
         'fault',
         'You reached the test ceiling without declaring your limit. No FTP was set; choose a suitable protocol for a future test.',
       );
     } else {
       try {
-        this.adapter!.setTarget(ftpTarget(this.report.protocol, this.report.elapsed));
+        this.adapter!.setTarget(
+          ftpTarget(this.report.protocol, this.report.elapsed, this.report.startingLoad),
+        );
       } catch (error) {
         void this.finish('fault', (error as Error).message);
       }
@@ -123,6 +137,7 @@ export class FtpControl {
   }
   finish(kind: 'effort' | 'cancel' | 'fault', reason = ''): Promise<void> {
     if (this.ending) return this.ending;
+    if (this.currentTelemetry) this.recordTelemetry(this.currentTelemetry());
     this.phase = 'stopping';
     this.report.reason = reason;
     this.ending = Promise.resolve().then(async () => {
@@ -144,9 +159,17 @@ export class FtpControl {
         this.report.reason = `Trainer shutdown failed: ${(error as Error).message}. FTP unchanged; physical load is unknown.`;
       }
       this.phase = 'finished';
+      this.report.controlAudit = this.snapshot?.audit;
+      this.report.controlMessage = this.snapshot?.message;
       this.changed();
     });
     this.changed();
     return this.ending;
+  }
+  private recordTelemetry(t: Telemetry) {
+    if (Number.isFinite(t.receivedAt))
+      this.report.lastTelemetry = Object.fromEntries(
+        Object.entries(t).filter(([, value]) => Number.isFinite(value)),
+      ) as Telemetry;
   }
 }

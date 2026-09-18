@@ -1,5 +1,13 @@
 # Implementation status and decisions
 
+## September 18 — low-load FTP feedback and diagnostics
+
+The rider reports that the fixed 50 W FTP warm-up feels too soft to sustain a comfortable cadence, even in the small chainring/middle rear cog. Review found an inflexible setup (all assessments started and warmed up at 50 W), with no evidence yet of a wrong FTMS power opcode or watt scaling. FTP setup now offers explicitly approved 50/75/100 W starting loads. Startup uses the selected load, and the subsequent ramp does not drop below it. Existing workout/diagnostic defaults, fresh-data/cadence guards, Stop handling and command ramp limits remain intact. The UI compares recent measured/acknowledged power and explains ERG cadence behavior. Failed reports now retain the final telemetry observation and command audit rather than only earlier valid readings.
+
+This is a setup and diagnostic improvement, not a verified resolution of the reported physical sensation. The failed assessment report and clarification of lost pedal pressure versus cranks physically driving the feet are still needed to narrow the hardware explanation. No physical resistance commands were sent by development tools. See [assessment behavior and limitations](FTP_ASSESSMENT.md).
+
+Verification: all 122 unit tests pass, including explicit 75/100 W startup commands, rejection of unsupported grants, no return to 50 W, retained cadence-fault observations and legacy defaults. Three browser workflows pass: selected-load FTP calculation/settings persistence, FTP fault/cancellation preservation and existing automatic ERG pause/resume/completion. Both production builds pass with the existing large Three.js bundle warning.
+
 ## September 18 — guided FTP assessment
 
 Workouts and Settings now expose a guided FTP ramp assessment without requiring an existing FTP. Gentle and standard protocols use absolute watt steps after a five-minute warm-up; the result is 75% of the best measured, time-weighted 60-second ramp power. The rider declares maximal effort with a dedicated button. Confirmed Stop and evidence checks are required before the result and rider FTP are saved atomically. Cancellation, timing/sensor/control faults, missing evidence and reaching the protocol ceiling preserve the previous FTP. Assessment history, JSON downloads, checkpoints and validated backup import are included. See [protocol and limitations](FTP_ASSESSMENT.md).

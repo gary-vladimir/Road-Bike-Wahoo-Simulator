@@ -340,6 +340,46 @@ describe('controlled road lifecycle with synthetic GATT', () => {
   });
 });
 describe('automatic ERG workout lifecycle with synthetic GATT', () => {
+  it.each([75, 100])(
+    'honors an explicitly selected %i W starting load without a 50 W dip',
+    async (watts) => {
+      const f = fixture();
+      const pilot = await ErgPilot.prepare(
+        f.source,
+        (s) => f.snapshots.push(s),
+        'erg',
+        'workout',
+        300,
+        watts,
+      );
+      await pilot.start({ baselineConfirmed: true, trainerProfileConfirmed: true });
+      expect(f.writes).toEqual([[0], [5, watts, 0], [7]]);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(f.writes.filter((w) => w[0] === 5)).toEqual([[5, watts, 0]]);
+      pilot.setTarget(watts + 20);
+      await vi.advanceTimersByTimeAsync(2000);
+      const powers = f.writes.filter((w) => w[0] === 5).map((w) => w[1] + 256 * w[2]);
+      expect(powers.every((p) => p >= watts)).toBe(true);
+      expect(powers.at(-1)).toBe(watts + 20);
+      await pilot.stop();
+    },
+  );
+  it('rejects unapproved startup values and keeps diagnostic/SIM startup unchanged', async () => {
+    const f = fixture();
+    await expect(ErgPilot.prepare(f.source, () => {}, 'erg', 'workout', 300, 125)).rejects.toThrow(
+      'starting load',
+    );
+    await expect(
+      ErgPilot.prepare(f.source, () => {}, 'erg', 'diagnostic', 100, 75),
+    ).rejects.toThrow('starting load');
+    await expect(ErgPilot.prepare(f.source, () => {}, 'sim', 'road', 100, 75)).rejects.toThrow(
+      'starting load',
+    );
+    await expect(ErgPilot.prepare(f.source, () => {}, 'erg', 'workout', 50, 75)).rejects.toThrow(
+      'starting load',
+    );
+    expect(f.writes).toEqual([]);
+  });
   function workout() {
     const f = fixture();
     const plan = {

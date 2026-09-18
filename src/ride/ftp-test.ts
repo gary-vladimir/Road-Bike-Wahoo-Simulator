@@ -1,4 +1,7 @@
+import type { Telemetry } from '../trainer/ftms';
+import type { AuditEntry } from '../trainer/control';
 export type FtpProtocol = 'gentle' | 'standard';
+export type FtpStartingLoad = 50 | 75 | 100;
 export const ftpProtocols = Object.freeze({
   gentle: { name: 'Gentle ramp', start: 50, step: 10, ceiling: 300 },
   standard: { name: 'Standard ramp', start: 100, step: 20, ceiling: 600 },
@@ -17,6 +20,10 @@ export type FtpAssessment = {
   id: string;
   startedAt: string;
   protocol: FtpProtocol;
+  startingLoad?: FtpStartingLoad;
+  lastTelemetry?: Telemetry;
+  controlAudit?: AuditEntry[];
+  controlMessage?: string;
   status: 'in-progress' | 'estimated' | 'cancelled' | 'invalid' | 'interrupted';
   elapsed: number;
   readings: FtpReading[];
@@ -25,15 +32,27 @@ export type FtpAssessment = {
   bestMinute?: number;
   ftp?: number;
 };
-export function ftpTarget(protocol: FtpProtocol, elapsed: number) {
+export function ftpRampStart(protocol: FtpProtocol, startingLoad: FtpStartingLoad = 50) {
+  const p = ftpProtocols[protocol];
+  return Math.max(p.start, Math.ceil(startingLoad / p.step) * p.step);
+}
+export function ftpTarget(
+  protocol: FtpProtocol,
+  elapsed: number,
+  startingLoad: FtpStartingLoad = 50,
+) {
   const p = ftpProtocols[protocol];
   return elapsed < ftpWarmupSeconds
-    ? 50
-    : Math.min(p.ceiling, p.start + Math.floor((elapsed - ftpWarmupSeconds) / 60) * p.step);
+    ? startingLoad
+    : Math.min(
+        p.ceiling,
+        ftpRampStart(protocol, startingLoad) +
+          Math.floor((elapsed - ftpWarmupSeconds) / 60) * p.step,
+      );
 }
-export function ftpDuration(protocol: FtpProtocol) {
+export function ftpDuration(protocol: FtpProtocol, startingLoad: FtpStartingLoad = 50) {
   const p = ftpProtocols[protocol];
-  return ftpWarmupSeconds + (1 + (p.ceiling - p.start) / p.step) * 60;
+  return ftpWarmupSeconds + (1 + (p.ceiling - ftpRampStart(protocol, startingLoad)) / p.step) * 60;
 }
 /** Time-weighted trailing windows, including partial stages, excluding the warm-up. */
 export function estimateFtp(readings: FtpReading[]) {
@@ -98,13 +117,44 @@ export function validateFtpAssessment(value: FtpAssessment) {
     !['in-progress', 'estimated', 'cancelled', 'invalid', 'interrupted'].includes(value.status) ||
     !Number.isFinite(value.elapsed) ||
     value.elapsed < 0 ||
-    value.elapsed > ftpDuration(value.protocol) + 3 ||
+    (value.startingLoad !== undefined && ![50, 75, 100].includes(value.startingLoad)) ||
+    value.elapsed > ftpDuration(value.protocol, value.startingLoad) + 3 ||
     typeof value.reason !== 'string' ||
     typeof value.stopConfirmed !== 'boolean' ||
     !Array.isArray(value.readings) ||
     value.readings.length > 20000
   )
     throw new Error('Invalid FTP assessment.');
+  if (
+    value.controlMessage !== undefined &&
+    (typeof value.controlMessage !== 'string' || value.controlMessage.length > 2000)
+  )
+    throw new Error('Invalid FTP control message.');
+  if (
+    value.lastTelemetry !== undefined &&
+    (!value.lastTelemetry ||
+      typeof value.lastTelemetry !== 'object' ||
+      !Number.isFinite(value.lastTelemetry.receivedAt) ||
+      Object.values(value.lastTelemetry).some((n) => n !== undefined && !Number.isFinite(n)))
+  )
+    throw new Error('Invalid FTP diagnostic telemetry.');
+  if (
+    value.controlAudit !== undefined &&
+    (!Array.isArray(value.controlAudit) ||
+      value.controlAudit.length > 200 ||
+      value.controlAudit.some(
+        (e) =>
+          !e ||
+          !Number.isFinite(e.at) ||
+          typeof e.event !== 'string' ||
+          (e.result !== undefined && !Number.isFinite(e.result)) ||
+          (e.bytes !== undefined &&
+            (!Array.isArray(e.bytes) ||
+              e.bytes.length > 30 ||
+              e.bytes.some((n) => !Number.isInteger(n) || n < 0 || n > 255))),
+      ))
+  )
+    throw new Error('Invalid FTP control audit.');
   let previous = 0;
   for (const r of value.readings) {
     if (
