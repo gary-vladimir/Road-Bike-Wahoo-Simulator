@@ -33,6 +33,8 @@ test.beforeEach(async ({ page }) => {
       writeValueWithResponse: async (bytes: ArrayBuffer) => {
         const command = Array.from(new Uint8Array(bytes));
         writes.push(command);
+        if (command[0] === 5 && (window as unknown as { mockFollowPower: boolean }).mockFollowPower)
+          (window as unknown as { mockPower: number }).mockPower = command[1] + 256 * command[2];
         if (command[0] === 8 && (window as unknown as { mockHoldStop: boolean }).mockHoldStop) {
           Object.assign(window, {
             mockAcknowledgeStop: () => {
@@ -114,6 +116,74 @@ async function openControlledRoad(page: import('@playwright/test').Page) {
 }
 const roadWrites = (page: import('@playwright/test').Page) =>
   page.evaluate(() => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites);
+test('FTP ramp uses measured power, saves automatically, survives reload and unlocks profile-based training', async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await page.clock.install();
+  await openControlledRoad(page);
+  await page.evaluate(() => Object.assign(window, { mockFollowPower: true }));
+  await page.getByRole('button', { name: 'Workouts', exact: true }).click();
+  await page.getByRole('button', { name: 'Take an FTP test' }).click();
+  await expect(page.getByRole('heading', { name: 'Find your FTP.' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start FTP test' })).toBeDisabled();
+  await page.getByLabel('FTP test protocol').selectOption('standard');
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Start FTP test' }).click();
+  await expect(page.getByRole('heading', { name: 'Find a comfortable rhythm' })).toBeVisible();
+  await page.clock.runFor(300000);
+  await expect(page.getByRole('heading', { name: 'Step 1', exact: true })).toBeVisible();
+  await page.clock.runFor(420000);
+  await page.screenshot({ path: 'test-results/ftp-ramp-desktop.png' });
+  await page.getByRole('button', { name: 'I’ve reached my limit' }).click();
+  await expect(page.getByRole('status')).toHaveText(
+    'Saved to Settings. Your workouts now use this FTP.',
+  );
+  const heading = await page.getByRole('heading', { name: /Estimated FTP:/ }).innerText();
+  const ftp = Number(heading.match(/(\d+) W/)![1]);
+  expect(ftp).toBeGreaterThanOrEqual(164);
+  expect(ftp).toBeLessThanOrEqual(166);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'test-results/ftp-result-mobile.png', fullPage: true });
+  const writes = await roadWrites(page);
+  expect(writes.at(-1)?.[0]).toBe(8);
+  expect(writes.some((w) => w[0] === 17)).toBe(false);
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download assessment JSON', exact: true }).click();
+  expect((await downloaded).suggestedFilename()).toMatch(/^bikesim-ftp-.*\.json$/);
+  await page.getByRole('button', { name: 'Back to BikeSIM' }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.getByLabel('FTP watts')).toHaveValue(String(ftp));
+  await page.reload();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.getByLabel('FTP watts')).toHaveValue(String(ftp));
+  expect(await roadWrites(page)).toEqual([]);
+  await page.getByRole('button', { name: 'Take an FTP test' }).click();
+  await expect(page.getByText(`${ftp} W estimated FTP`, { exact: false })).toBeVisible();
+});
+test('FTP cancellation and cadence loss keep existing FTP unchanged', async ({ page }) => {
+  await openControlledRoad(page);
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('FTP watts').fill('175');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await page.getByRole('button', { name: 'Take an FTP test' }).click();
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Start FTP test' }).click();
+  await expect(page.getByRole('heading', { name: 'Find a comfortable rhythm' })).toBeVisible();
+  await page.evaluate(() => Object.assign(window, { mockCadence: 0 }));
+  await expect(page.getByRole('heading', { name: 'FTP unchanged' })).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('previous FTP was preserved');
+  await page.getByRole('button', { name: 'Back to BikeSIM' }).click();
+  await expect(page.getByLabel('FTP watts')).toHaveValue('175');
+  await page.getByRole('button', { name: 'Take an FTP test' }).click();
+  await page.getByRole('checkbox').check();
+  const before = (await roadWrites(page)).length;
+  await page.getByRole('button', { name: 'Start FTP test' }).click();
+  await expect(page.getByRole('heading', { name: 'Pedal above 50 rpm to begin' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel test · Stop trainer' }).click();
+  await expect(page.getByRole('status')).toContainText('previous FTP was preserved');
+  expect((await roadWrites(page)).length).toBe(before);
+});
 test('automatic ERG follows a workout, pauses, resumes at 50 W, finishes and saves its control mode', async ({
   page,
 }) => {

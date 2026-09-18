@@ -1,5 +1,11 @@
 # Implementation status and decisions
 
+## September 18 — guided FTP assessment
+
+Workouts and Settings now expose a guided FTP ramp assessment without requiring an existing FTP. Gentle and standard protocols use absolute watt steps after a five-minute warm-up; the result is 75% of the best measured, time-weighted 60-second ramp power. The rider declares maximal effort with a dedicated button. Confirmed Stop and evidence checks are required before the result and rider FTP are saved atomically. Cancellation, timing/sensor/control faults, missing evidence and reaching the protocol ceiling preserve the previous FTP. Assessment history, JSON downloads, checkpoints and validated backup import are included. See [protocol and limitations](FTP_ASSESSMENT.md).
+
+Verification: 119 unit tests and seven affected browser workflows pass. The new browser workflows verify automated calculation/settings persistence across reload, cancellation and cadence faults using synthetic Bluetooth and an accelerated clock. Existing automatic ERG, SIM without FTP, library/customization, settings/backup and mobile-control checks also pass. Both production builds pass with the existing large Three.js bundle warning. Desktop assessment and mobile result screenshots were visually reviewed. Physical ramp-test accuracy remains unverified; no real trainer commands were sent by development tools.
+
 ## September 17 — Rolling foothills evidence and automatic ERG workouts
 
 Reviewed the rider's completed 6 km FIT: integrity passes, duration is 983.306 seconds, sample mean power is 95.88 W, signed grades match the road within rounding, and zero-watt records show both descent acceleration and momentum decay. Thirty positive-power records contain zero cadence, so sensor behavior and sustained ERG accuracy remain qualified. See [skeptical ride review](FOOTHILLS_RIDE_REVIEW.md).

@@ -26,6 +26,8 @@ The refreshed scene has aligned road paint, textured terrain, mesquite trees and
 
 For a structured power workout:
 
+If you do not know your FTP, choose **Workouts → Take an FTP test** (also in Settings). In the trainer-control build, a guided absolute-watt ramp assessment estimates FTP from your best measured minute and automatically saves a valid result. Cancelled or unreliable attempts preserve your existing FTP. See [protocol, limitations and local assessment history](docs/FTP_ASSESSMENT.md).
+
 1. Open **Workouts** and select a preset. **First five minutes** is the shortest supplied preset.
 2. Choose **Demo · simulated rider** and start. Demo uses an explicitly labeled 200 W FTP example unless you enter your own FTP in Settings.
 3. Follow the countdown, power target, cadence cue, and interval profile. Adjust intensity, pause/resume, or stop with the buttons. `Space` or `Escape` pauses; resuming requires an explicit click.

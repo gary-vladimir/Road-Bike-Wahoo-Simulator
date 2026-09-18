@@ -6,10 +6,12 @@ export default function Settings({
   settings,
   onSave,
   onImport,
+  onFtpTest,
 }: {
   settings: RiderSettings;
   onSave: (s: RiderSettings) => Promise<void>;
   onImport: () => Promise<void>;
+  onFtpTest: () => void;
 }) {
   const [ftp, setFtp] = useState(settings.ftp?.toString() ?? ''),
     [mass, setMass] = useState(settings.mass.toString()),
@@ -69,10 +71,13 @@ export default function Settings({
               onChange={(e) => setFtp(e.target.value)}
             />
             <small>
-              Leave blank if unknown. Free SIM road previews do not require FTP. Power workouts use
-              your FTP; workout demos use a labeled 200 W example if blank.
+              FTP estimates your sustainable power and personalizes workout targets. Leave blank if
+              unknown and take the guided test. SIM road rides do not require FTP.
             </small>
           </label>
+          <button type="button" className="secondary" onClick={onFtpTest}>
+            Take an FTP test
+          </button>
           <label>
             Rider weight (kg)
             <input
@@ -227,9 +232,9 @@ export default function Settings({
           <hr />
           <h3>Trainer control</h3>
           <p>
-            Road rides currently use demo or read-only Bluetooth power. The opt-in Trainer panel has
-            separate, manually started SIM and ERG tests. Automatic route resistance awaits the SIM
-            hardware check; starting a road ride does not control your KICKR.
+            In the trainer-control build, choose automatic SIM terrain for roads or automatic ERG
+            for structured workouts. Pairing alone does not start resistance control. FTP
+            assessments use their own absolute watt targets and never require a made-up FTP.
           </p>
         </section>
       </div>

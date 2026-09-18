@@ -31,6 +31,7 @@ import WorkoutEditor from './ui/WorkoutEditor';
 import Diagnostics from './ui/Diagnostics';
 import History, { Summary } from './ui/History';
 import Settings from './ui/Settings';
+import FtpTest from './ui/FtpTest';
 import RoadSetup, { routeWorkout } from './ui/RoadSetup';
 import type { Route } from './ride/terrain';
 import {
@@ -54,6 +55,7 @@ export default function App() {
     [loaded, setLoaded] = useState(false);
   const device = useSyncExternalStore(trainer.subscribe, trainer.getSnapshot);
   const [ergReady, setErgReady] = useState(false);
+  const [ftpTest, setFtpTest] = useState(false);
   const ergIssue = workoutControlIssue(selected, settings.ftp);
   const ergRange = settings.ftp === null ? null : workoutPowerRange(selected, settings.ftp);
   useEffect(() => setErgReady(false), [selected, settings.ftp, source]);
@@ -177,6 +179,16 @@ export default function App() {
       setError((error as Error).message);
     }
   };
+  if (ftpTest)
+    return (
+      <FtpTest
+        onClose={() => {
+          void refresh()
+            .catch(() => setError('Could not refresh rider settings.'))
+            .finally(() => setFtpTest(false));
+        }}
+      />
+    );
   if (engine)
     return (
       <Ride
@@ -247,6 +259,7 @@ export default function App() {
       ) : page === 'Settings' ? (
         <Settings
           settings={settings}
+          onFtpTest={() => setFtpTest(true)}
           onSave={async (s) => {
             await saveSettings(s);
             setSettings(s);
@@ -278,6 +291,20 @@ export default function App() {
               <span className="status-dot" /> Demo ready
             </span>
           </div>
+          <section className="panel ftp-entry">
+            <div>
+              <h2>
+                {settings.ftp === null ? 'New to power training?' : `Your FTP: ${settings.ftp} W`}
+              </h2>
+              <p>
+                A guided ramp test estimates your FTP and sets your workout targets. No previous FTP
+                needed.
+              </p>
+            </div>
+            <button className="secondary" disabled={!loaded} onClick={() => setFtpTest(true)}>
+              Take an FTP test
+            </button>
+          </section>
           <section className="feature">
             <div className="feature-copy">
               <span className="eyebrow">A ROAD OF YOUR OWN</span>

@@ -16,6 +16,7 @@ export type PilotSnapshot = {
   message: string;
   audit: AuditEntry[];
   machineStatus: { at: number; bytes: number[] }[];
+  stopConfirmed?: boolean;
   mode?: 'erg' | 'sim';
   grade?: number;
   requestedGrade?: number;
@@ -63,6 +64,7 @@ export class ErgPilot {
   private snapshot(): PilotSnapshot {
     return {
       state: this.supervisor.state,
+      stopConfirmed: this.supervisor.stopConfirmed,
       applied: this.supervisor instanceof PowerSupervisor ? this.supervisor.applied : 0,
       requested: this.mode === 'erg' ? this.target : 0,
       mode: this.mode,

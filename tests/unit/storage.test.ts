@@ -12,16 +12,61 @@ import {
   saveWorkout,
   savePilotReport,
   loadPilotReport,
+  loadFtpAssessments,
+  saveFtpAssessment,
 } from '../../src/storage/store';
 import { RideEngine } from '../../src/ride/engine';
 import { presets } from '../../src/workouts/model';
 import { routes } from '../../src/ride/terrain';
 import { routeWorkout } from '../../src/ui/RoadSetup';
 import { PilotEvidence } from '../../src/trainer/pilot-evidence';
+import { estimateFtp, ftpTarget, type FtpAssessment } from '../../src/ride/ftp-test';
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
 });
 describe('local persistence and backup boundaries', () => {
+  it('atomically applies valid FTP estimates, preserves FTP on interruption and round-trips assessment evidence', async () => {
+    await saveSettings({ ftp: 200, mass: 70, quality: 'low' });
+    const readings = Array.from({ length: 720 }, (_, i) => ({
+      start: i,
+      end: i + 1,
+      power: ftpTarget('gentle', i),
+      cadence: 80,
+      target: ftpTarget('gentle', i),
+      acknowledged: ftpTarget('gentle', i),
+    }));
+    const report: FtpAssessment = {
+      version: 1,
+      id: 'ftp-result',
+      startedAt: new Date().toISOString(),
+      protocol: 'gentle',
+      status: 'estimated',
+      elapsed: 720,
+      readings,
+      stopConfirmed: true,
+      ...estimateFtp(readings),
+    };
+    await saveFtpAssessment(report, true);
+    expect(await loadSettings()).toMatchObject({ ftp: 83, mass: 70, quality: 'low' });
+    const pending: FtpAssessment = {
+      ...report,
+      id: 'pending',
+      status: 'in-progress',
+      ftp: undefined,
+      bestMinute: undefined,
+    };
+    await saveFtpAssessment(pending);
+    expect((await loadFtpAssessments())[0].status).toBe('interrupted');
+    await expect(saveFtpAssessment(pending, true)).rejects.toThrow('valid assessment');
+    expect((await loadSettings()).ftp).toBe(83);
+    const b = await backup();
+    globalThis.indexedDB = new IDBFactory();
+    await restoreBackup(b);
+    expect((await loadFtpAssessments()).find((r) => r.id === report.id)).toEqual(report);
+    b.ftpAssessments[1].ftp = 250;
+    await expect(restoreBackup(b)).rejects.toThrow('estimate');
+    expect((await loadSettings()).ftp).toBe(83);
+  });
   it('round-trips automatic ERG metadata without arming control and rejects mode mismatches', async () => {
     const e = new RideEngine(presets[0], 'bluetooth', 200, 70, { trainerControl: 'erg' });
     await saveSession(e.session);

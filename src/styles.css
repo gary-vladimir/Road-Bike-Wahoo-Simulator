@@ -1390,3 +1390,46 @@ h1 {
     transition: none;
   }
 }
+.ftp-entry,
+.ftp-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.ftp-entry {
+  margin-bottom: 1.5rem;
+}
+.ftp-entry p {
+  margin-bottom: 0;
+}
+.ftp-test {
+  max-width: 1100px;
+}
+.ftp-test > .panel {
+  margin: 1.5rem 0;
+}
+.ftp-test progress {
+  width: 100%;
+  accent-color: #d9ef78;
+}
+.ftp-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+.ftp-metrics strong {
+  display: block;
+  font-size: clamp(1.6rem, 4vw, 3rem);
+  font-variant-numeric: tabular-nums;
+}
+.ftp-metrics span {
+  color: #a5b6ae;
+}
+.ftp-history {
+  border-top: 1px solid #36463e;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}

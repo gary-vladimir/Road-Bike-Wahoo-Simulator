@@ -4,6 +4,7 @@ import { validateWorkout, type Workout } from '../workouts/model';
 import { validateRoute } from '../ride/terrain';
 import type { PilotReport } from '../trainer/pilot-evidence';
 import { stockWheel, validateWheel, type WheelSetup } from '../ride/bike';
+import { validateFtpAssessment, type FtpAssessment } from '../ride/ftp-test';
 export type Settings = {
   ftp: number | null;
   mass: number;
@@ -31,6 +32,35 @@ export async function loadSettings(): Promise<Settings> {
 }
 export async function saveSettings(settings: Settings) {
   await (await db()).put('settings', settings, 'rider');
+}
+export async function loadFtpAssessments(): Promise<FtpAssessment[]> {
+  const reports: FtpAssessment[] = (await (await db()).get('settings', 'ftp-assessments')) ?? [];
+  return reports.map((r) =>
+    r.status === 'in-progress'
+      ? {
+          ...r,
+          status: 'interrupted',
+          reason: 'The assessment was interrupted. FTP was not changed.',
+        }
+      : r,
+  );
+}
+/** Result and rider FTP are committed together; interrupted attempts never apply an estimate. */
+export async function saveFtpAssessment(report: FtpAssessment, apply = false) {
+  validateFtpAssessment(report);
+  if (apply && report.status !== 'estimated')
+    throw new Error('Only a valid assessment can set FTP.');
+  const tx = (await db()).transaction('settings', 'readwrite');
+  const reports: FtpAssessment[] = (await tx.store.get('ftp-assessments')) ?? [];
+  await tx.store.put(
+    [structuredClone(report), ...reports.filter((r) => r.id !== report.id)].slice(0, 50),
+    'ftp-assessments',
+  );
+  if (apply) {
+    const rider = { ...defaults, ...(await tx.store.get('rider')), ftp: report.ftp };
+    await tx.store.put(rider, 'rider');
+  }
+  await tx.done;
 }
 /** Separate from rider settings/backups; restored for export only, never control resumption. */
 export async function savePilotReport(report: PilotReport) {
@@ -65,6 +95,7 @@ export async function backup() {
     settings: await loadSettings(),
     workouts: await database.getAll('workouts'),
     sessions: await database.getAll('sessions'),
+    ftpAssessments: await loadFtpAssessments(),
   };
 }
 export async function restoreBackup(raw: unknown) {
@@ -79,6 +110,11 @@ export async function restoreBackup(raw: unknown) {
   )
     throw new Error('This is not a supported BikeSIM backup.');
   b.workouts.forEach(validateWorkout);
+  if (b.ftpAssessments !== undefined) {
+    if (!Array.isArray(b.ftpAssessments) || b.ftpAssessments.length > 50)
+      throw new Error('Invalid FTP assessment history.');
+    b.ftpAssessments.forEach(validateFtpAssessment);
+  }
   for (const s of b.sessions) {
     validateWorkout(s.workout);
     if (s.route) validateRoute(s.route);
@@ -168,6 +204,25 @@ export async function restoreBackup(raw: unknown) {
       .objectStore('sessions')
       .put({ ...s, status: s.status === 'in-progress' ? 'interrupted' : s.status });
   await tx.objectStore('settings').put(b.settings, 'rider');
+  if (b.ftpAssessments) {
+    const existing: FtpAssessment[] =
+      (await tx.objectStore('settings').get('ftp-assessments')) ?? [];
+    const imported = b.ftpAssessments.map((r) =>
+      r.status === 'in-progress'
+        ? {
+            ...r,
+            status: 'interrupted' as const,
+            reason: 'Imported incomplete assessment. FTP unchanged.',
+          }
+        : r,
+    );
+    await tx
+      .objectStore('settings')
+      .put(
+        [...imported, ...existing.filter((r) => !imported.some((i) => i.id === r.id))].slice(0, 50),
+        'ftp-assessments',
+      );
+  }
   await tx.done;
 }
 export function download(name: string, content: BlobPart, type = 'application/json') {
