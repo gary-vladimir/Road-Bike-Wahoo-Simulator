@@ -2,6 +2,7 @@ import type { RideEngine } from './engine';
 import { routePosition, validateRoute, type Route } from './terrain';
 import type { PilotSnapshot } from '../trainer/pilot';
 import { roadControlRange } from './control-range';
+import { workoutControlIssue, workoutTarget } from './workout-control';
 
 export function supportsRoadControl(route: Route) {
   validateRoute(route);
@@ -16,15 +17,16 @@ type Adapter = {
   }) => Promise<void>;
   stop: () => Promise<void>;
   setGrade: (grade: number) => void;
+  setTarget: (watts: number) => void;
 };
-export type RoadControlFactory = (changed: (snapshot: PilotSnapshot) => void) => Promise<Adapter>;
+export type RideControlFactory = (changed: (snapshot: PilotSnapshot) => void) => Promise<Adapter>;
 /** One explicit arming attempt. Resume creates a new instance after shutdown completes. */
-export class RoadControl {
+export class RideControl {
   ready = false;
   ending = false;
   ended = false;
   snapshot?: PilotSnapshot;
-  message = 'Preparing trainer for flat SIM. The ride clock is waiting.';
+  message: string;
   private cancelled = false;
   private adapter?: Adapter;
   private pending?: Promise<void>;
@@ -32,15 +34,22 @@ export class RoadControl {
   private lastEvent = '';
   constructor(
     private engine: RideEngine,
-    private prepare: RoadControlFactory,
+    private prepare: RideControlFactory,
     private changed: () => void,
   ) {
-    if (
-      engine.session.source !== 'bluetooth' ||
-      !engine.session.route ||
-      !supportsRoadControl(engine.session.route)
-    )
+    const s = engine.session;
+    if (s.source !== 'bluetooth' || !['sim', 'erg'].includes(s.trainerControl ?? ''))
+      throw new Error('Choose an explicitly controlled live ride.');
+    if (s.trainerControl === 'sim' && (!s.route || !supportsRoadControl(s.route)))
       throw new Error('Trainer-controlled roads must stay between −4% and +5%.');
+    if (s.trainerControl === 'erg') {
+      const issue = workoutControlIssue(s.workout, s.ftp);
+      if (s.route || issue) throw new Error(issue ?? 'ERG workouts cannot control terrain.');
+    }
+    this.message =
+      s.trainerControl === 'sim'
+        ? 'Preparing trainer for flat SIM. The ride clock is waiting.'
+        : 'Preparing 50 W ERG. Pedal above 50 rpm; the workout clock is waiting.';
   }
   start() {
     if (this.pending || this.cancelled) return this.pending ?? Promise.resolve();
@@ -52,12 +61,13 @@ export class RoadControl {
       const adapter = await this.prepare((snapshot) => {
         this.snapshot = snapshot;
         this.message = snapshot.message;
-        const event = `${snapshot.state}: ${snapshot.grade ?? 0}%`;
+        const mode = this.engine.session.trainerControl!;
+        const event = `${snapshot.state}: ${mode === 'sim' ? `${snapshot.grade ?? 0}%` : `${snapshot.applied} W`}`;
         if (event !== this.lastEvent) {
           this.lastEvent = event;
           this.engine.session.events.push({
             elapsed: this.engine.state.elapsed,
-            message: `SIM controller ${event}. ${snapshot.message}`,
+            message: `${mode.toUpperCase()} controller ${event}. ${snapshot.message}`,
           });
         }
         this.ready = !this.cancelled && snapshot.state === 'running';
@@ -91,11 +101,23 @@ export class RoadControl {
     }
     if (!this.ready) return;
     try {
-      this.adapter!.setGrade(
-        this.engine.state.phase === 'countdown'
-          ? 0
-          : routePosition(this.engine.session.route!, this.engine.state.distance * 1000).grade,
-      );
+      if (this.engine.session.trainerControl === 'sim')
+        this.adapter!.setGrade(
+          this.engine.state.phase === 'countdown'
+            ? 0
+            : routePosition(this.engine.session.route!, this.engine.state.distance * 1000).grade,
+        );
+      else
+        this.adapter!.setTarget(
+          this.engine.state.phase === 'countdown'
+            ? 50
+            : workoutTarget(
+                this.engine.session.workout,
+                this.engine.session.ftp!,
+                this.engine.state.elapsed,
+                this.engine.state.bias,
+              ),
+        );
     } catch (error) {
       this.message = (error as Error).message;
       this.engine.pause(this.message);
@@ -120,7 +142,7 @@ export class RoadControl {
         this.ended = true;
         this.engine.session.events.push({
           elapsed: this.engine.state.elapsed,
-          message: `SIM control ended. ${this.message}`,
+          message: `${this.engine.session.trainerControl!.toUpperCase()} control ended. ${this.message}`,
         });
         this.changed();
       }

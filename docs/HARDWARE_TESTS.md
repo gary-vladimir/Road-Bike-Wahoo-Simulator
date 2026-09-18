@@ -1,5 +1,11 @@
 # Hardware validation log
 
+## September 17 — Rolling foothills completion and FIT reviewed
+
+The rider completed the 6 km automatic SIM route and reports plausible feel. The [FIT review](FOOTHILLS_RIDE_REVIEW.md) confirms integrity, a complete 983.306-second ride, monotonic distance, expected signed grades and realistic zero-watt coasting behavior. Positive-power records occasionally have zero cadence; this remains a sensor/estimation question rather than evidence of perfect telemetry. Physical load tracking cannot be reconstructed from FIT alone.
+
+Automatic ERG workouts are now implemented with [separate workout grants and a documented manual check](ERG_WORKOUTS.md). Software verification does not establish physical ERG tracking; no trainer commands were sent by development tools.
+
 ## September 17 — SIM pause/resume and Strava import confirmed
 
 The rider explicitly confirmed successful SIM pause/resume and manual FIT import into Strava. This completes those outstanding checks for the tested Valley setup. Physical load after Stop, cross-app profile persistence and connection-loss recovery have not been independently characterized.

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErgPilot, type PilotSnapshot } from '../../src/trainer/pilot';
-import { RoadControl, supportsRoadControl } from '../../src/ride/road-control';
+import { RideControl, supportsRoadControl } from '../../src/ride/ride-control';
 import { RideEngine } from '../../src/ride/engine';
 import { routes } from '../../src/ride/terrain';
 import { presets } from '../../src/workouts/model';
+import { workoutPowerCeiling } from '../../src/ride/workout-control';
 
 function fixture() {
   const document = Object.assign(new EventTarget(), { hidden: false });
@@ -130,7 +131,7 @@ describe('controlled road lifecycle with synthetic GATT', () => {
       route,
       trainerControl: 'sim',
     });
-    const control = new RoadControl(
+    const control = new RideControl(
       engine,
       (changed) => ErgPilot.prepare(f.source, changed, 'sim', 'road'),
       () => {},
@@ -250,7 +251,7 @@ describe('controlled road lifecycle with synthetic GATT', () => {
     f.ack(8);
     await f.control.stop();
     expect(f.control.ended).toBe(true);
-    const resumed = new RoadControl(
+    const resumed = new RideControl(
       f.engine,
       (changed) => ErgPilot.prepare(f.source, changed, 'sim'),
       () => {},
@@ -280,7 +281,7 @@ describe('controlled road lifecycle with synthetic GATT', () => {
   });
   it('contains preparation failures and can finish a cancelled ride', async () => {
     const f = road();
-    const control = new RoadControl(
+    const control = new RideControl(
       f.engine,
       async () => {
         throw new Error('Connection lost');
@@ -300,7 +301,7 @@ describe('controlled road lifecycle with synthetic GATT', () => {
   it('waits for pending startup even if the adapter unexpectedly rejects Stop', async () => {
     const f = road();
     let finishStart!: () => void;
-    const control = new RoadControl(
+    const control = new RideControl(
       f.engine,
       async () => ({
         start: () =>
@@ -311,6 +312,7 @@ describe('controlled road lifecycle with synthetic GATT', () => {
           throw new Error('Transport failure');
         },
         setGrade: () => {},
+        setTarget: () => {},
       }),
       () => {},
     );
@@ -335,6 +337,114 @@ describe('controlled road lifecycle with synthetic GATT', () => {
     expect(f.control.message).toContain('unknown');
     expect(f.disconnect).toHaveBeenCalledTimes(1);
     expect(f.writes.filter((w) => w[0] === 8)).toHaveLength(1);
+  });
+});
+describe('automatic ERG workout lifecycle with synthetic GATT', () => {
+  function workout() {
+    const f = fixture();
+    const plan = {
+      ...structuredClone(presets[0]),
+      blocks: [
+        { ...presets[0].blocks[0], seconds: 10, from: 0.4, to: 0.6 },
+        { ...presets[0].blocks[0], seconds: 10, from: 1, to: 1 },
+      ],
+    };
+    const engine = new RideEngine(plan, 'bluetooth', 200, 70, { trainerControl: 'erg' });
+    const make = () =>
+      new RideControl(
+        engine,
+        (changed) =>
+          ErgPilot.prepare(f.source, changed, 'erg', 'workout', workoutPowerCeiling(plan, 200)),
+        () => {},
+      );
+    return { ...f, engine, make, control: make() };
+  }
+  it('waits for pedaling, holds 50 W through countdown and follows ramps, intervals and intensity without SIM commands', async () => {
+    const f = workout();
+    f.coast();
+    await f.control.start();
+    expect(f.control.ready).toBe(false);
+    expect(f.writes).toEqual([]);
+    f.pedal();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(f.control.ready).toBe(true);
+    f.control.update();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(f.control.snapshot?.applied).toBe(50);
+    f.engine.state.phase = 'running';
+    f.engine.state.elapsed = 5;
+    f.control.update();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(f.control.snapshot?.applied).toBe(100);
+    f.engine.state.elapsed = 10;
+    f.control.update();
+    await vi.advanceTimersByTimeAsync(11000);
+    expect(f.control.snapshot?.applied).toBe(200);
+    f.engine.setBias(0.8);
+    f.control.update();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(f.control.snapshot?.applied).toBe(160);
+    const watts = f.writes
+      .filter((w) => w[0] === 5)
+      .map((w) => new DataView(Uint8Array.from(w).buffer).getInt16(1, true));
+    watts.slice(1).forEach((w, i) => expect(Math.abs(w - watts[i])).toBeLessThanOrEqual(10));
+    expect(f.writes.some((w) => w[0] === 17)).toBe(false);
+    f.engine.finish(true);
+    f.control.update();
+    await f.control.stop();
+    expect(f.writes.at(-1)).toEqual([8, 1]);
+    expect(
+      f.engine.session.events.some((e) => e.message.includes('ERG controller running: 200 W')),
+    ).toBe(true);
+    expect(f.disconnect).not.toHaveBeenCalled();
+  });
+  it('pauses on low cadence or stale power and only resumes with a new 50 W session', async () => {
+    for (const fault of ['cadence', 'stale']) {
+      const f = workout();
+      await f.control.start();
+      f.engine.state.phase = 'running';
+      f.engine.state.elapsed = 10;
+      f.control.update();
+      await vi.advanceTimersByTimeAsync(11000);
+      if (fault === 'cadence') f.stall();
+      else f.expire();
+      await vi.advanceTimersByTimeAsync(300);
+      expect(f.engine.state.phase).toBe('paused');
+      expect(f.control.ready).toBe(false);
+      await f.control.stop();
+      expect(f.writes.at(-1)).toEqual([8, 1]);
+      f.pedal();
+      const count = f.writes.length;
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(f.writes).toHaveLength(count);
+      f.engine.resume();
+      const resumed = f.make();
+      await resumed.start();
+      expect(f.writes.slice(-3)).toEqual([[0], [5, 50, 0], [7]]);
+      expect(f.engine.state.countdown).toBe(3);
+      await resumed.stop();
+    }
+  });
+  it('cancels a waiting workout without a load write and rejects missing readiness or device range', async () => {
+    const f = workout();
+    f.coast();
+    await f.control.start();
+    await f.control.stop();
+    f.pedal();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(f.writes).toEqual([]);
+    const pilot = await ErgPilot.prepare(f.source, () => {}, 'erg', 'workout', 220);
+    await expect(pilot.start()).rejects.toThrow('Confirm');
+    expect(f.writes).toEqual([]);
+    await expect(
+      ErgPilot.prepare(
+        { ...f.source, range: { min: 0, max: 150, increment: 1 } },
+        () => {},
+        'erg',
+        'workout',
+        220,
+      ),
+    ).rejects.toThrow('range');
   });
 });
 describe('supervised pilot lifecycle with synthetic GATT only', () => {

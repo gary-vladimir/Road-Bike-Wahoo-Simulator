@@ -19,7 +19,9 @@ export function Summary({ session, onBack }: { session: Session; onBack: () => v
           ? 'DEMO SESSION · SIMULATED DATA'
           : session.trainerControl === 'sim'
             ? 'LIVE POWER SESSION · AUTOMATIC SIM TERRAIN'
-            : 'LIVE POWER SESSION · READ-ONLY'}
+            : session.trainerControl === 'erg'
+              ? 'LIVE POWER SESSION · AUTOMATIC ERG WORKOUT'
+              : 'LIVE POWER SESSION · READ-ONLY'}
       </div>
       <h1>{session.status === 'completed' ? 'A ride well spent.' : 'Your ride, recorded.'}</h1>
       <p>
@@ -28,9 +30,11 @@ export function Summary({ session, onBack }: { session: Session; onBack: () => v
       <p>
         {session.trainerControl === 'sim'
           ? 'SIM terrain control · physical gears · free pacing'
-          : session.route
-            ? 'SIM terrain preview · free pacing · no resistance commands'
-            : 'ERG workout preview · guided power targets'}
+          : session.trainerControl === 'erg'
+            ? 'ERG workout control · automatic power targets'
+            : session.route
+              ? 'SIM terrain preview · free pacing · no resistance commands'
+              : 'ERG workout preview · guided power targets'}
       </p>
       <div className="summary-stats">
         <div>

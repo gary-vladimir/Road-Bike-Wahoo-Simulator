@@ -33,6 +33,11 @@ import History, { Summary } from './ui/History';
 import Settings from './ui/Settings';
 import RoadSetup, { routeWorkout } from './ui/RoadSetup';
 import type { Route } from './ride/terrain';
+import {
+  workoutControlIssue,
+  workoutPowerRange,
+  workoutPowerCeiling,
+} from './ride/workout-control';
 type Page = 'Ride' | 'Workouts' | 'Ride history' | 'Trainer' | 'Settings';
 export default function App() {
   const [page, setPage] = useState<Page>('Ride'),
@@ -41,13 +46,17 @@ export default function App() {
   const [settings, setSettings] = useState<RiderSettings>(defaults),
     [custom, setCustom] = useState<Workout[]>([]),
     [sessions, setSessions] = useState<Session[]>([]);
-  const [source, setSource] = useState<Source>('demo'),
+  const [source, setSource] = useState<Source | 'controlled'>('demo'),
     [engine, setEngine] = useState<RideEngine | null>(null),
     [summary, setSummary] = useState<Session | null>(null);
   const [editor, setEditor] = useState(false),
     [error, setError] = useState(''),
     [loaded, setLoaded] = useState(false);
   const device = useSyncExternalStore(trainer.subscribe, trainer.getSnapshot);
+  const [ergReady, setErgReady] = useState(false);
+  const ergIssue = workoutControlIssue(selected, settings.ftp);
+  const ergRange = settings.ftp === null ? null : workoutPowerRange(selected, settings.ftp);
+  useEffect(() => setErgReady(false), [selected, settings.ftp, source]);
   const refresh = async () => {
     const [profile, workouts, rides] = await Promise.all([
       loadSettings(),
@@ -106,7 +115,7 @@ export default function App() {
   const start = () => {
     setError('');
     try {
-      if (source === 'bluetooth') {
+      if (source !== 'demo') {
         if (
           device.status !== 'connected' ||
           device.telemetry.powerAt === undefined ||
@@ -118,11 +127,28 @@ export default function App() {
         if (settings.ftp === null)
           throw new Error('Enter your known FTP in Settings before starting a live workout.');
       }
+      if (source === 'controlled') {
+        if (!ergReady || ergIssue) throw new Error(ergIssue ?? 'Confirm ERG readiness first.');
+        const device = trainer.getPilotDevice('erg');
+        if (
+          device.range.increment !== 1 ||
+          device.range.min > 40 ||
+          device.range.max < workoutPowerCeiling(selected, settings.ftp!)
+        )
+          throw new Error('The trainer power range cannot represent this workout.');
+      }
       setEngine(
-        new RideEngine(selected, source, settings.ftp ?? 200, settings.mass, {
-          bikeMass: settings.bikeMass ?? 9,
-          wheel: settings.wheel,
-        }),
+        new RideEngine(
+          selected,
+          source === 'controlled' ? 'bluetooth' : source,
+          settings.ftp ?? 200,
+          settings.mass,
+          {
+            trainerControl: source === 'controlled' ? 'erg' : undefined,
+            bikeMass: settings.bikeMass ?? 9,
+            wheel: settings.wheel,
+          },
+        ),
       );
     } catch (e) {
       setError((e as Error).message);
@@ -358,18 +384,55 @@ export default function App() {
               </div>
               <label className="source-label">
                 Ride source
-                <select value={source} onChange={(e) => setSource(e.target.value as Source)}>
+                <select
+                  value={source}
+                  onChange={(e) => setSource(e.target.value as Source | 'controlled')}
+                >
                   <option value="demo">Demo · simulated rider</option>
                   <option value="bluetooth">KICKR · live power, read-only</option>
+                  {import.meta.env.VITE_TRAINER_CONTROL === 'pilot' && (
+                    <option value="controlled">KICKR · automatic ERG workout</option>
+                  )}
                 </select>
               </label>
               <div className="start-note">
                 {source === 'demo'
                   ? `Demo FTP: ${settings.ftp ?? 200} W${settings.ftp === null ? ' (example)' : ''}. No trainer commands.`
-                  : 'Live metrics and target guidance. Automatic resistance is not enabled.'}
+                  : source === 'controlled'
+                    ? `ERG follows your workout targets${ergRange ? `: ${ergRange.min}–${ergRange.max} W at ${settings.ftp} W FTP` : ''}. Starts at 50 W, then changes by up to 10 W per second. The HUD shows requested and acknowledged watts separately.`
+                    : 'Live metrics and target guidance. Automatic resistance is not enabled.'}
               </div>
-              <button className="primary" onClick={start} disabled={!loaded}>
-                <Play size={18} /> {source === 'demo' ? 'Start demo ride' : 'Start live-power ride'}{' '}
+              {source === 'controlled' && (
+                <>
+                  {ergIssue && <p role="alert">{ergIssue}</p>}
+                  <p className="fine-print">
+                    Use the small front chainring and a middle rear cog. Keep cadence steady and
+                    above 50 rpm; low or missing cadence pauses ERG. Visual hills do not add slope
+                    resistance in this mode.
+                  </p>
+                  <label className="source-label">
+                    <input
+                      type="checkbox"
+                      checked={ergReady}
+                      onChange={(e) => setErgReady(e.target.checked)}
+                    />
+                    I’m ready for automatic ERG: my FTP and trainer profile are correct, the current
+                    load is comfortable, other trainer apps are closed, and I understand the
+                    selected watt targets and 80–110% intensity adjustment.
+                  </label>
+                </>
+              )}
+              <button
+                className="primary"
+                onClick={start}
+                disabled={!loaded || (source === 'controlled' && (!ergReady || !!ergIssue))}
+              >
+                <Play size={18} />{' '}
+                {source === 'demo'
+                  ? 'Start demo ride'
+                  : source === 'controlled'
+                    ? 'Start ERG workout'
+                    : 'Start live-power ride'}{' '}
                 <ChevronRight size={17} />
               </button>
               <button className="secondary full customize-button" onClick={() => setEditor(true)}>

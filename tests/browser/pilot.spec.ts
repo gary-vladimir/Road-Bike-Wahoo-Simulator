@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { waitForInitialRide } from '../helpers/ride-ready';
+import { presets } from '../../src/workouts/model';
+import { defaults } from '../../src/storage/store';
 
 test.beforeEach(async ({ page }) => {
   test.skip(process.env.VITE_TRAINER_CONTROL !== 'pilot', 'Requires the opt-in pilot server');
@@ -112,6 +114,84 @@ async function openControlledRoad(page: import('@playwright/test').Page) {
 }
 const roadWrites = (page: import('@playwright/test').Page) =>
   page.evaluate(() => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites);
+test('automatic ERG follows a workout, pauses, resumes at 50 W, finishes and saves its control mode', async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await openControlledRoad(page);
+  await page.getByRole('button', { name: 'Workouts', exact: true }).click();
+  await page.getByLabel('Ride source').selectOption('controlled');
+  await expect(page.getByRole('button', { name: 'Start ERG workout' })).toBeDisabled();
+  await expect(page.getByRole('alert')).toContainText('known FTP');
+  const plan = {
+    ...presets[0],
+    id: 'erg-browser',
+    name: 'ERG control check',
+    custom: true,
+    blocks: [
+      { ...presets[0].blocks[0], seconds: 10, from: 0.4, to: 0.4 },
+      { ...presets[0].blocks[0], seconds: 16, from: 0.6, to: 0.6 },
+    ],
+  };
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Import backup file').setInputFiles({
+    name: 'erg-check.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        version: 1,
+        settings: { ...defaults, ftp: 200, quality: 'low' },
+        workouts: [plan],
+        sessions: [],
+      }),
+    ),
+  });
+  await expect(page.getByRole('status')).toContainText('Backup imported.');
+  await page.getByRole('button', { name: 'Workouts', exact: true }).click();
+  await page.getByRole('button', { name: /ERG control check/ }).click();
+  await page.getByLabel('Ride source').selectOption('controlled');
+  await page.getByRole('checkbox', { name: /I’m ready for automatic ERG/ }).check();
+  await page.evaluate(() => Object.assign(window, { mockCadence: 0 }));
+  await page.getByRole('button', { name: 'Start ERG workout' }).click();
+  await expect(page.locator('.countdown-overlay')).toContainText('Waiting for pedaling', {
+    timeout: 25000,
+  });
+  expect(await roadWrites(page)).toEqual([]);
+  await page.evaluate(() => Object.assign(window, { mockCadence: 80 }));
+  await waitForInitialRide(page);
+  await expect(page.getByLabel('Trainer control status')).toContainText('80 W', { timeout: 6000 });
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Resume ride' })).toBeEnabled();
+  expect((await roadWrites(page)).at(-1)).toEqual([8, 1]);
+  await page.getByRole('button', { name: 'Resume ride' }).click();
+  await expect(page.locator('.countdown-overlay')).toContainText('50 W ERG is active');
+  expect((await roadWrites(page)).slice(-3)).toEqual([[0], [5, 50, 0], [7]]);
+  await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 8000 });
+  await page.getByRole('button', { name: 'Decrease intensity' }).click();
+  await expect(page.getByText('95% intensity', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Trainer control status')).toContainText('114 W', {
+    timeout: 16000,
+  });
+  await page.screenshot({ path: 'test-results/erg-workout.png' });
+  await expect(page.getByRole('heading', { name: 'A ride well spent.' })).toBeVisible({
+    timeout: 22000,
+  });
+  await expect(
+    page.getByText('LIVE POWER SESSION · AUTOMATIC ERG WORKOUT', { exact: true }),
+  ).toBeVisible();
+  expect((await roadWrites(page)).at(-1)).toEqual([8, 1]);
+  expect((await roadWrites(page)).some((w) => w[0] === 17)).toBe(false);
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export session JSON' }).click();
+  expect((await pending).suggestedFilename()).toMatch(/\.json$/);
+  await page.reload();
+  await page.getByRole('button', { name: 'Ride history', exact: true }).click();
+  await page.locator('.history-main').click();
+  await expect(
+    page.getByText('LIVE POWER SESSION · AUTOMATIC ERG WORKOUT', { exact: true }),
+  ).toBeVisible();
+  expect(await roadWrites(page)).toEqual([]);
+});
 test('controlled road requires readiness, supports coasting, resumes explicitly and finishes after Stop', async ({
   page,
 }) => {
@@ -371,7 +451,7 @@ test('zero-cadence Start waits, Stop cancels, and retry works without reconnecti
   ).toEqual([]);
   await stop.click();
   await expect(
-    page.getByText('Test cancelled. No resistance commands were sent.', { exact: true }),
+    page.getByText('Control cancelled. No resistance commands were sent.', { exact: true }),
   ).toBeVisible();
   await expect(stop).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();

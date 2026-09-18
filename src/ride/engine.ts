@@ -2,7 +2,8 @@ import { position, totalSeconds, validateWorkout, type Workout } from '../workou
 import type { Telemetry } from '../trainer/ftms';
 import { advanceRoad, routeLength, routePosition, validateRoute, type Route } from './terrain';
 import { stockWheel, validateWheel, type WheelSetup } from './bike';
-import { supportsRoadControl } from './road-control';
+import { supportsRoadControl } from './ride-control';
+import { workoutControlIssue, workoutTarget } from './workout-control';
 export type Source = 'demo' | 'bluetooth';
 export type Phase = 'countdown' | 'running' | 'paused' | 'finished';
 export type Sample = {
@@ -42,7 +43,7 @@ export type Session = {
   wheel?: WheelSetup;
   physicsVersion?: number;
   mode?: 'sim' | 'erg';
-  trainerControl?: 'sim';
+  trainerControl?: 'sim' | 'erg';
   route?: Route;
   elapsed: number;
   distance: number;
@@ -75,7 +76,12 @@ export class RideEngine {
     source: Source,
     ftp: number | null,
     mass: number,
-    options?: { route?: Route; bikeMass?: number; wheel?: WheelSetup; trainerControl?: 'sim' },
+    options?: {
+      route?: Route;
+      bikeMass?: number;
+      wheel?: WheelSetup;
+      trainerControl?: 'sim' | 'erg';
+    },
   ) {
     validateWorkout(workout);
     if (
@@ -87,10 +93,15 @@ export class RideEngine {
       throw new Error('Enter FTP between 50–600 W and rider mass between 35–200 kg.');
     if (options?.route) validateRoute(options.route);
     if (
-      options?.trainerControl &&
+      options?.trainerControl === 'sim' &&
       (source !== 'bluetooth' || !options.route || !supportsRoadControl(options.route))
     )
       throw new Error('This road is outside the supported trainer-control range (−4% to +5%).');
+    if (options?.trainerControl === 'erg') {
+      const issue = workoutControlIssue(workout, ftp);
+      if (source !== 'bluetooth' || options.route || issue)
+        throw new Error(issue ?? 'Automatic ERG requires a live workout without a SIM route.');
+    }
     const bikeMass = options?.bikeMass ?? 9;
     validateWheel(options?.wheel ?? stockWheel);
     if (!Number.isFinite(bikeMass) || bikeMass < 4 || bikeMass > 30)
@@ -161,7 +172,7 @@ export class RideEngine {
     const current = position(this.session.workout, this.state.elapsed);
     this.state.target = this.session.route
       ? 0
-      : Math.round(current.target * (this.session.ftp ?? 0) * this.state.bias);
+      : workoutTarget(this.session.workout, this.session.ftp!, this.state.elapsed, this.state.bias);
     if (this.session.route)
       this.state.grade = routePosition(this.session.route, this.state.distance * 1000).grade;
     else this.state.grade += (current.block.grade - this.state.grade) * (1 - Math.exp(-step / 3));

@@ -20,8 +20,10 @@ import { saveSession } from '../storage/store';
 import { coastStatus, routeLength, routePosition } from '../ride/terrain';
 import TerrainProfile from './TerrainProfile';
 import { stockWheel, virtualWheelRpm } from '../ride/bike';
-import { RoadControl } from '../ride/road-control';
+import { RideControl } from '../ride/ride-control';
+import { workoutPowerCeiling } from '../ride/workout-control';
 import { ErgPilot } from '../trainer/pilot';
+import { lastPowerAcknowledgement } from '../trainer/pilot-evidence';
 
 export default function Ride({
   engine,
@@ -41,13 +43,23 @@ export default function Ride({
   const onSceneReady = useCallback(() => setSceneReady(true), []);
   const container = useRef<HTMLDivElement>(null);
   const queue = useRef(Promise.resolve());
-  const control = useRef<RoadControl | null>(null);
-  const controlled = engine.session.trainerControl === 'sim';
+  const control = useRef<RideControl | null>(null);
+  const controlled = !!engine.session.trainerControl;
+  const erg = engine.session.trainerControl === 'erg';
   const refresh = () => setState({ ...engine.state });
   const arm = () => {
-    const controller = new RoadControl(
+    const controller = new RideControl(
       engine,
-      (changed) => ErgPilot.prepare(trainer.getPilotDevice('sim'), changed, 'sim', 'road'),
+      (changed) =>
+        erg
+          ? ErgPilot.prepare(
+              trainer.getPilotDevice('erg'),
+              changed,
+              'erg',
+              'workout',
+              workoutPowerCeiling(engine.session.workout, engine.session.ftp!),
+            )
+          : ErgPilot.prepare(trainer.getPilotDevice('sim'), changed, 'sim', 'road'),
       refresh,
     );
     control.current = controller;
@@ -129,6 +141,9 @@ export default function Ride({
     next = engine.session.workout.blocks[current.index + 1];
   const route = engine.session.route;
   const terrain = route ? routePosition(route, state.distance * 1000) : null;
+  const acknowledgedPower = control.current?.snapshot
+    ? lastPowerAcknowledgement(control.current.snapshot)?.watts
+    : undefined;
   const coast = coastStatus(
     state.speed,
     state.grade,
@@ -177,7 +192,9 @@ export default function Ride({
             {engine.session.source === 'demo'
               ? 'DEMO RIDE · SIMULATED DATA'
               : controlled
-                ? 'LIVE POWER · AUTOMATIC SIM TERRAIN'
+                ? erg
+                  ? 'LIVE POWER · AUTOMATIC ERG WORKOUT'
+                  : 'LIVE POWER · AUTOMATIC SIM TERRAIN'
                 : 'LIVE POWER · RESISTANCE NOT CONTROLLED'}
           </span>
           <h2>{engine.session.workout.name}</h2>
@@ -253,20 +270,32 @@ export default function Ride({
             ? controlled
               ? 'SIM terrain · physical gears'
               : 'SIM terrain preview · resistance unchanged'
-            : 'ERG workout preview'}
+            : erg
+              ? 'ERG workout · automatic watts'
+              : 'ERG workout preview'}
         </span>
         <div>
           <b>{state.grade.toFixed(1)}%</b> visual grade
         </div>
         {controlled && (
           <div aria-label="Trainer control status">
-            <b>{control.current?.snapshot?.grade?.toFixed(2) ?? '—'}%</b> last acknowledged trainer
-            slope
+            {erg ? (
+              <>
+                <b>{acknowledgedPower ?? '—'} W</b> last acknowledged trainer target
+              </>
+            ) : (
+              <>
+                <b>{control.current?.snapshot?.grade?.toFixed(2) ?? '—'}%</b> last acknowledged
+                trainer slope
+              </>
+            )}
             <p>
               {control.current?.ending
                 ? 'Stopping trainer…'
                 : control.current?.ready
-                  ? 'Terrain control active'
+                  ? erg
+                    ? 'ERG control active · changes up to 10 W/s'
+                    : 'Terrain control active'
                   : (control.current?.message ?? 'Waiting for road preparation')}
             </p>
           </div>
@@ -450,7 +479,9 @@ export default function Ride({
           <p>
             {controlled
               ? control.current?.ready
-                ? 'Flat SIM is active. Shift to a comfortable gear; terrain follows after the countdown.'
+                ? erg
+                  ? '50 W ERG is active. Keep pedaling above 50 rpm; workout targets follow after the countdown.'
+                  : 'Flat SIM is active. Shift to a comfortable gear; terrain follows after the countdown.'
                 : (control.current?.message ?? 'Preparing trainer. The ride clock is waiting.')
               : engine.session.source === 'demo'
                 ? 'Demo rider starting. No trainer commands.'
@@ -470,7 +501,7 @@ export default function Ride({
             {engine.session.source === 'bluetooth' && (
               <p>
                 {controlled
-                  ? `${control.current?.ending ? 'Stopping trainer…' : (control.current?.message ?? '')} Stop may restore a heavier load. Resume deliberately when comfortable; it will start with flat SIM.`
+                  ? `${control.current?.ending ? 'Stopping trainer…' : (control.current?.message ?? '')} Stop may restore a heavier load. Resume deliberately when comfortable; it will start with ${erg ? '50 W ERG once cadence reaches 50 rpm' : 'flat SIM'}.`
                   : 'BikeSIM is reading only. It has not changed trainer resistance.'}
               </p>
             )}

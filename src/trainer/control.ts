@@ -1,4 +1,4 @@
-/** Bounded commands used only by the explicitly armed diagnostic pilot. */
+/** Bounded commands used only by explicitly armed diagnostics or ride controllers. */
 export type ControlCommand =
   | { kind: 'request' }
   | { kind: 'start' }
@@ -16,6 +16,7 @@ export type ControlLimits = {
   max: number;
   increment: number;
   ceiling: number;
+  powerMode?: 'workout';
   simulation?: { minGrade: number; maxGrade: number };
 };
 export function encodeControl(command: ControlCommand, limits: ControlLimits): Uint8Array {
@@ -62,14 +63,14 @@ export function encodeControl(command: ControlCommand, limits: ControlLimits): U
     ![limits.min, limits.max, limits.increment, limits.ceiling, watts].every(Number.isFinite) ||
     limits.increment <= 0 ||
     limits.min > limits.max ||
-    limits.ceiling > 150 ||
+    limits.ceiling > (limits.powerMode === 'workout' ? 600 : 150) ||
     limits.ceiling < 40 ||
     !Number.isInteger(watts) ||
     watts < Math.max(40, limits.min) ||
     watts > Math.min(limits.max, limits.ceiling) ||
     (watts - limits.min) % limits.increment !== 0
   )
-    throw new Error('Power target is outside the validated pilot limits');
+    throw new Error('Power target is outside the authorized control limits');
   const bytes = new Uint8Array(3);
   bytes[0] = 0x05;
   new DataView(bytes.buffer).setInt16(1, watts, true);

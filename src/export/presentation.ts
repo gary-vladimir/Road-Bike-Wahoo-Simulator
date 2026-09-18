@@ -8,7 +8,7 @@ export function activityPresentation(s: Session) {
     ? s.trainerControl === 'sim'
       ? 'SIM terrain with automatic trainer resistance'
       : 'SIM terrain with free pacing'
-    : `${s.workout.category} workout`;
+    : `${s.workout.category} workout${s.trainerControl === 'erg' ? ' with automatic ERG power targets' : ' with target guidance'}`;
   const status =
     s.status === 'completed'
       ? 'Completed'

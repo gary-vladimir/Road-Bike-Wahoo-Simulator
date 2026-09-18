@@ -6,7 +6,7 @@ import type { Settings } from '../storage/store';
 import type { Workout } from '../workouts/model';
 import TerrainProfile from './TerrainProfile';
 import { stockWheel, wheelLabel } from '../ride/bike';
-import { supportsRoadControl } from '../ride/road-control';
+import { supportsRoadControl } from '../ride/ride-control';
 export function routeWorkout(route: Route): Workout {
   const block = {
     name: 'Your own pace',

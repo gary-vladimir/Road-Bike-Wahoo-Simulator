@@ -1,4 +1,10 @@
-import { ControlQueue, type AuditEntry, type ControlWire } from './control';
+import {
+  ControlQueue,
+  encodeControl,
+  type ControlLimits,
+  type AuditEntry,
+  type ControlWire,
+} from './control';
 import { PowerSupervisor, type PilotState } from '../safety/supervisor';
 import type { Telemetry } from './ftms';
 import { SimulationSupervisor } from '../safety/simulation';
@@ -39,7 +45,7 @@ async function acquireLock(): Promise<() => void> {
       .catch(reject);
   });
 }
-/** Explicitly armed control for diagnostics or bounded SIM roads. Pairing never arms it. */
+/** Explicitly armed diagnostics, SIM roads or ERG workouts. Pairing never arms it. */
 export class ErgPilot {
   private timer?: ReturnType<typeof setInterval>;
   private target = 50;
@@ -52,6 +58,7 @@ export class ErgPilot {
   private status: BluetoothRemoteGATTCharacteristic;
   private point: BluetoothRemoteGATTCharacteristic;
   private queue: ControlQueue;
+  private limits: ControlLimits;
   private statuses: { at: number; bytes: number[] }[] = [];
   private snapshot(): PilotSnapshot {
     return {
@@ -110,7 +117,8 @@ export class ErgPilot {
     private release: () => void,
     private changed: (s: PilotSnapshot) => void,
     private mode: 'erg' | 'sim',
-    private scope: 'diagnostic' | 'road',
+    private scope: 'diagnostic' | 'road' | 'workout',
+    powerCeiling: number,
   ) {
     this.point = point;
     this.status = status;
@@ -128,13 +136,14 @@ export class ErgPilot {
         return () => point.removeEventListener('characteristicvaluechanged', notify);
       },
     };
-    const limits = {
+    const limits: ControlLimits = (this.limits = {
       ...source.range,
-      ceiling: 100,
+      ceiling: scope === 'workout' ? powerCeiling : 100,
+      ...(scope === 'workout' ? { powerMode: 'workout' as const } : {}),
       ...(mode === 'sim'
         ? { simulation: scope === 'road' ? roadControlRange : diagnosticControlRange }
         : {}),
-    };
+    });
     this.queue = new ControlQueue(wire, limits);
     this.target = mode === 'sim' ? 0 : 50;
     this.supervisor =
@@ -146,9 +155,15 @@ export class ErgPilot {
     source: PilotDevice,
     changed: (s: PilotSnapshot) => void,
     mode: 'erg' | 'sim' = 'erg',
-    scope: 'diagnostic' | 'road' = 'diagnostic',
+    scope: 'diagnostic' | 'road' | 'workout' = 'diagnostic',
+    powerCeiling = 100,
   ): Promise<ErgPilot> {
     if (scope === 'road' && mode !== 'sim') throw new Error('Road control requires SIM mode.');
+    if (
+      scope === 'workout' &&
+      (mode !== 'erg' || !Number.isInteger(powerCeiling) || powerCeiling < 50 || powerCeiling > 600)
+    )
+      throw new Error('Workouts require ERG and an explicit 50–600 W ceiling.');
     if (import.meta.env.VITE_TRAINER_CONTROL !== 'pilot')
       throw new Error('Hardware control is disabled in this build.');
     if (document.hidden) throw new Error('Keep the trainer test tab visible.');
@@ -162,7 +177,16 @@ export class ErgPilot {
         status = await service.getCharacteristic(0x2ada);
       if (!point.properties.write || !point.properties.indicate)
         throw new Error('The trainer must support acknowledged control writes and indications.');
-      pilot = new ErgPilot(source, point, status, release, changed, mode, scope);
+      if (scope === 'workout') {
+        // KICKR's advertised 1 W range must cover startup and the complete chosen workout.
+        if (
+          source.range.increment !== 1 ||
+          source.range.min > 40 ||
+          source.range.max < powerCeiling
+        )
+          throw new Error('Trainer power range cannot represent the complete workout.');
+      }
+      pilot = new ErgPilot(source, point, status, release, changed, mode, scope, powerCeiling);
       await point.startNotifications();
       status.addEventListener('characteristicvaluechanged', pilot.machineStatus);
       await status.startNotifications();
@@ -184,11 +208,11 @@ export class ErgPilot {
     }
     if (this.supervisor.state !== 'idle') return;
     if (
-      this.mode === 'sim' &&
+      (this.mode === 'sim' || this.scope === 'workout') &&
       (!readiness?.baselineConfirmed || !readiness.trainerProfileConfirmed)
     ) {
       await this.stop();
-      throw new Error('Confirm the comfortable SIM baseline and matching trainer profile first.');
+      throw new Error('Confirm the comfortable baseline and matching trainer profile first.');
     }
     if (readiness) this.readiness = { ...readiness };
     this.supervisor.state = 'waiting';
@@ -243,7 +267,10 @@ export class ErgPilot {
       await arming;
       const state = this.snapshot().state;
       if (state === 'running')
-        this.supervisor.message = 'Test running. Use Stop to end resistance control.';
+        this.supervisor.message =
+          this.scope === 'workout'
+            ? 'ERG active. Keep a steady cadence; Stop ends control.'
+            : 'Test running. Use Stop to end resistance control.';
       this.emit();
       if (state !== 'running') {
         await this.shutdown;
@@ -257,7 +284,8 @@ export class ErgPilot {
   }
   setTarget(watts: number) {
     if (this.mode !== 'erg') throw new Error('Power targets are unavailable in SIM mode.');
-    if (!Number.isInteger(watts) || watts < 50 || watts > 100)
+    if (this.scope === 'workout') encodeControl({ kind: 'power', watts }, this.limits);
+    else if (!Number.isInteger(watts) || watts < 50 || watts > 100)
       throw new Error('The supervised test is limited to 50–100 W.');
     if (this.disposed || this.shutdown || this.supervisor.state !== 'running') return;
     this.target = watts;

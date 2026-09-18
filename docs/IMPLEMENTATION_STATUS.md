@@ -1,5 +1,13 @@
 # Implementation status and decisions
 
+## September 17 — Rolling foothills evidence and automatic ERG workouts
+
+Reviewed the rider's completed 6 km FIT: integrity passes, duration is 983.306 seconds, sample mean power is 95.88 W, signed grades match the road within rounding, and zero-watt records show both descent acceleration and momentum decay. Thirty positive-power records contain zero cadence, so sensor behavior and sustained ERG accuracy remain qualified. See [skeptical ride review](FOOTHILLS_RIDE_REVIEW.md).
+
+The workout library now offers explicit automatic ERG in the opt-in build. A shared ride coordinator handles SIM/ERG arming, shutdown, faults, resume and completion. ERG follows interval/ramp targets and intensity, with a workout-specific ceiling inside 40–600 W; the diagnostic panel remains 50–100 W. Startup/resume waits for valid cadence and starts at 50 W; targets move at no more than 10 W per second. The UI distinguishes measured power, workout target and last acknowledged trainer target. History/backups and export descriptions preserve automatic ERG mode without restoring control. See [workflow and remaining physical checks](ERG_WORKOUTS.md).
+
+Verification: all 108 unit tests pass. The full browser run passed 24 workflows; the remaining diagnostic cancellation check passed after updating its old message assertion, covering all 25 workflows. The new synthetic ERG workflow waits at zero cadence, starts, follows intervals, pauses/resumes, changes intensity, completes automatically and restores saved history without control. Default/pilot builds compile, and the ERG HUD was visually inspected. The existing large Three.js bundle warning remains. These are software checks; physical ERG tracking and connection-loss behavior remain unverified.
+
 ## September 17 — indoor exports and full catalog SIM control
 
 The rider confirmed SIM pause/resume and successful manual Strava import. Automatic SIM now supports all four existing roads inside −4% to +5%, including Rolling foothills. The road adapter has an explicit scope separate from the ±1% diagnostic adapter; both retain the same ramp, acknowledgement, telemetry, visibility and Stop protections. Route changes clear readiness and display the selected grade range. This supersedes the earlier ±1% road restriction without claiming physical validation of higher grades or connection-loss recovery.

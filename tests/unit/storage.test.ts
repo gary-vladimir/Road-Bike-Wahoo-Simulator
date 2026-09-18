@@ -22,6 +22,19 @@ beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
 });
 describe('local persistence and backup boundaries', () => {
+  it('round-trips automatic ERG metadata without arming control and rejects mode mismatches', async () => {
+    const e = new RideEngine(presets[0], 'bluetooth', 200, 70, { trainerControl: 'erg' });
+    await saveSession(e.session);
+    const b = await backup();
+    await restoreBackup(b);
+    expect((await loadSessions())[0]).toMatchObject({
+      trainerControl: 'erg',
+      mode: 'erg',
+      status: 'interrupted',
+    });
+    b.sessions[0].route = routes[0];
+    await expect(restoreBackup(b)).rejects.toThrow('control mode');
+  });
   it('saves diagnostic evidence separately without changing rider settings or restoring control', async () => {
     const report = new PilotEvidence().report({
       state: 'running',

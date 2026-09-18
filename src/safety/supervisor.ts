@@ -2,7 +2,7 @@ import { ControlQueue, encodeControl, type ControlLimits } from '../trainer/cont
 import type { Telemetry } from '../trainer/ftms';
 export type PilotState =
   'idle' | 'waiting' | 'arming' | 'running' | 'stopping' | 'stopped' | 'faulted';
-/** Bounded ERG pilot; ordinary workouts never construct this supervisor. */
+/** Shared bounded ERG control, with separate diagnostic and workout power grants. */
 export class PowerSupervisor {
   state: PilotState = 'idle';
   message = '';
@@ -37,7 +37,7 @@ export class PowerSupervisor {
       now < t.cadenceAt
     )
       throw new Error('Fresh power and cadence are required');
-    if (t.cadence < 50) throw new Error('Cadence below pilot minimum: 50 rpm');
+    if (t.cadence < 50) throw new Error('Cadence below ERG minimum: 50 rpm');
   }
   async arm() {
     if (!['idle', 'waiting'].includes(this.state))
@@ -98,7 +98,7 @@ export class PowerSupervisor {
         this.limits.min +
         Math.round((limited - this.limits.min) / this.limits.increment) * this.limits.increment;
       if (Math.abs(next - this.applied) > 10)
-        throw new Error('Device increment exceeds pilot ramp limit');
+        throw new Error('Device increment exceeds the ERG ramp limit');
       if (next !== this.applied) {
         await this.queue.send({ kind: 'power', watts: next });
         if (generation !== this.generation) return;
@@ -127,7 +127,7 @@ export class PowerSupervisor {
     if (this.finishing) return this.finishing;
     if (this.state === 'idle' || this.state === 'waiting') {
       this.state = 'stopped';
-      this.message = 'Test cancelled. No resistance commands were sent.';
+      this.message = 'Control cancelled. No resistance commands were sent.';
       return Promise.resolve();
     }
     if (this.state === 'stopped' || this.state === 'faulted') return Promise.resolve();
