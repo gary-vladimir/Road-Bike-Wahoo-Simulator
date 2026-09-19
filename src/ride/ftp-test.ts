@@ -24,6 +24,7 @@ export type FtpAssessment = {
   lastTelemetry?: Telemetry;
   controlAudit?: AuditEntry[];
   controlMessage?: string;
+  warmupPauses?: { elapsed: number; reason: string }[];
   status: 'in-progress' | 'estimated' | 'cancelled' | 'invalid' | 'interrupted';
   elapsed: number;
   readings: FtpReading[];
@@ -125,6 +126,21 @@ export function validateFtpAssessment(value: FtpAssessment) {
     value.readings.length > 20000
   )
     throw new Error('Invalid FTP assessment.');
+  if (
+    value.warmupPauses !== undefined &&
+    (!Array.isArray(value.warmupPauses) ||
+      value.warmupPauses.length > 50 ||
+      value.warmupPauses.some(
+        (p) =>
+          !p ||
+          !Number.isFinite(p.elapsed) ||
+          p.elapsed < 0 ||
+          p.elapsed >= ftpWarmupSeconds ||
+          p.elapsed > value.elapsed ||
+          typeof p.reason !== 'string',
+      ))
+  )
+    throw new Error('Invalid FTP warm-up recovery history.');
   if (
     value.controlMessage !== undefined &&
     (typeof value.controlMessage !== 'string' || value.controlMessage.length > 2000)

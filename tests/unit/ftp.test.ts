@@ -119,6 +119,52 @@ function fixture(wait = false, stopConfirmed = true) {
   return { control, tick, acknowledge, emit, targets, stops: () => stops };
 }
 describe('FTP controller lifecycle', () => {
+  it('freezes a coasting warm-up after Stop, resumes only explicitly and excludes recovery time from the ramp', async () => {
+    const f = fixture();
+    await f.control.start();
+    for (let i = 0; i < 219; i++) f.tick(i === 218 ? 0 : undefined);
+    expect(f.control.phase).toBe('running'); // Zero watts alone is not a cadence fault.
+    f.tick(0, 0);
+    await f.control.finish('warmup-pause');
+    expect(f.control.phase).toBe('paused');
+    expect(f.control.report).toMatchObject({
+      elapsed: 219,
+      status: 'in-progress',
+      stopConfirmed: true,
+    });
+    expect(f.stops()).toBe(1);
+    const commands = f.targets.length;
+    for (let i = 0; i < 60; i++) f.tick(0, 0);
+    f.tick(50, 80);
+    expect(f.control.phase).toBe('paused');
+    expect(f.control.report.elapsed).toBe(219);
+    expect(f.targets.length).toBe(commands);
+    await f.control.resumeWarmup();
+    for (let i = 219; i < 720; i++) f.tick();
+    await f.control.finish('effort');
+    expect(f.control.report).toMatchObject({ status: 'estimated', ftp: 83 });
+    expect(f.control.report.warmupPauses).toHaveLength(1);
+    expect(() => validateFtpAssessment(f.control.report)).not.toThrow();
+  });
+  it('allows cancellation from paused warm-up and never offers recovery after unknown Stop', async () => {
+    const f = fixture();
+    await f.control.start();
+    f.tick();
+    f.tick(0, 0);
+    await f.control.finish('warmup-pause');
+    await f.control.finish('cancel');
+    expect(f.control.phase).toBe('finished');
+    expect(f.control.report.status).toBe('cancelled');
+    const unknown = fixture(false, false);
+    await unknown.control.start();
+    unknown.tick();
+    unknown.tick(0, 0);
+    await unknown.control.finish('warmup-pause');
+    expect(unknown.control.phase).toBe('finished');
+    expect(unknown.control.report.status).toBe('invalid');
+    await unknown.control.resumeWarmup();
+    expect(unknown.control.phase).toBe('finished');
+  });
   it('waits for arming, records fresh measured power, stops once and returns a validated result', async () => {
     const f = fixture(true);
     await f.control.start();

@@ -5,6 +5,7 @@ import {
   estimateFtp,
   ftpDuration,
   ftpTarget,
+  ftpWarmupSeconds,
   type FtpAssessment,
   type FtpProtocol,
   type FtpStartingLoad,
@@ -16,7 +17,7 @@ type Adapter = {
   setTarget: (watts: number) => void;
 };
 export class FtpControl {
-  phase: 'waiting' | 'running' | 'stopping' | 'finished' = 'waiting';
+  phase: 'waiting' | 'running' | 'stopping' | 'paused' | 'finished' = 'waiting';
   snapshot?: PilotSnapshot;
   report: FtpAssessment;
   private adapter?: Adapter;
@@ -60,7 +61,7 @@ export class FtpControl {
           ['waiting', 'running'].includes(this.phase) &&
           ['stopping', 'stopped', 'faulted'].includes(snapshot.state)
         ) {
-          void this.finish('fault', snapshot.message);
+          void this.interrupt(snapshot.message);
         }
         this.changed();
       });
@@ -82,7 +83,7 @@ export class FtpControl {
     this.last = now;
     if (!Number.isFinite(dt) || dt <= 0 || dt > 2.5) {
       if (dt === 0) return;
-      void this.finish('fault', 'Assessment timing was interrupted. Start a fresh test.');
+      void this.interrupt('Assessment timing was interrupted.');
       return;
     }
     const ack = this.snapshot && lastPowerAcknowledgement(this.snapshot);
@@ -98,11 +99,10 @@ export class FtpControl {
         (at) => at !== undefined && Number.isFinite(at) && at <= now && now - at <= 2500,
       )
     ) {
-      void this.finish(
-        'fault',
+      void this.interrupt(
         t.cadence !== undefined && t.cadence < 50
-          ? `Trainer reported ${t.cadence} rpm, below the 50 rpm ERG minimum. FTP unchanged. Download the report if you were still pedaling steadily.`
-          : 'Power or cadence became unreliable. This attempt cannot set FTP; your previous FTP is unchanged.',
+          ? `Trainer reported ${t.cadence} rpm, below the 50 rpm ERG minimum. Download the report if you were still pedaling steadily.`
+          : 'Power or cadence became unreliable. Check the trainer connection and wait for fresh readings.',
       );
       return;
     }
@@ -135,8 +135,36 @@ export class FtpControl {
     }
     this.changed();
   }
-  finish(kind: 'effort' | 'cancel' | 'fault', reason = ''): Promise<void> {
+  private interrupt(reason: string) {
+    return this.finish(
+      this.phase === 'running' && this.report.elapsed < ftpWarmupSeconds ? 'warmup-pause' : 'fault',
+      reason,
+    );
+  }
+  resumeWarmup() {
+    if (
+      this.phase !== 'paused' ||
+      !this.report.stopConfirmed ||
+      this.report.elapsed >= ftpWarmupSeconds
+    )
+      return Promise.resolve();
+    this.phase = 'waiting';
+    this.adapter = undefined;
+    this.pending = undefined;
+    this.ending = undefined;
+    this.snapshot = undefined;
+    this.last = undefined;
+    this.report.reason = '';
+    this.report.stopConfirmed = false;
+    this.changed();
+    return this.start();
+  }
+  finish(kind: 'effort' | 'cancel' | 'fault' | 'warmup-pause', reason = ''): Promise<void> {
+    // A paused warm-up has already completed shutdown, but must still be cancellable.
+    if (this.phase === 'paused' && kind !== 'warmup-pause') this.ending = undefined;
     if (this.ending) return this.ending;
+    const recoverable =
+      kind === 'warmup-pause' && this.phase === 'running' && this.report.elapsed < ftpWarmupSeconds;
     if (this.currentTelemetry) this.recordTelemetry(this.currentTelemetry());
     this.phase = 'stopping';
     this.report.reason = reason;
@@ -144,7 +172,16 @@ export class FtpControl {
       try {
         await Promise.all([this.adapter?.stop(), this.pending]);
         this.report.stopConfirmed = this.snapshot?.stopConfirmed === true;
-        if (kind === 'effort' && this.report.stopConfirmed && this.snapshot?.state === 'stopped') {
+        if (recoverable && this.report.stopConfirmed) {
+          this.report.warmupPauses ??= [];
+          this.report.warmupPauses.push({ elapsed: this.report.elapsed, reason });
+          this.report.warmupPauses = this.report.warmupPauses.slice(-50);
+          this.report.reason = `Warm-up paused. ${reason} Let the flywheel slow, then resume deliberately when the load feels comfortable.`;
+        } else if (
+          kind === 'effort' &&
+          this.report.stopConfirmed &&
+          this.snapshot?.state === 'stopped'
+        ) {
           const result = estimateFtp(this.report.readings);
           Object.assign(this.report, result, { status: result.ftp ? 'estimated' : 'invalid' });
         } else {
@@ -158,7 +195,10 @@ export class FtpControl {
         this.report.status = 'invalid';
         this.report.reason = `Trainer shutdown failed: ${(error as Error).message}. FTP unchanged; physical load is unknown.`;
       }
-      this.phase = 'finished';
+      this.phase =
+        recoverable && this.report.stopConfirmed && this.report.status === 'in-progress'
+          ? 'paused'
+          : 'finished';
       this.report.controlAudit = this.snapshot?.audit;
       this.report.controlMessage = this.snapshot?.message;
       this.changed();

@@ -27,6 +27,7 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
   const controller = useRef<FtpControl | null>(null);
   const writes = useRef(Promise.resolve());
   const finalQueued = useRef(false);
+  const previousPhase = useRef('');
   const mounted = useRef(true);
   const persist = (report: FtpAssessment, final = false) => {
     const copy = structuredClone(report);
@@ -52,6 +53,8 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
     if (!mounted.current) return;
     render((n) => n + 1);
     const c = controller.current;
+    if (c?.phase === 'paused' && previousPhase.current !== 'paused') persist(c.report);
+    previousPhase.current = c?.phase ?? '';
     if (c?.phase === 'finished' && !finalQueued.current) {
       finalQueued.current = true;
       persist(c.report, true);
@@ -194,9 +197,11 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
             valid estimate to Settings. This is an estimate, not an exact physiological measurement.
           </p>
           <p className="fine-print">
-            At least three ramp minutes are required. Cancel, connection loss, cadence below 50 rpm,
-            tab switching, or reaching the test ceiling without declaring your limit will leave FTP
-            unchanged. There is no pause/resume or intensity adjustment during an assessment.
+            At least three ramp minutes are required. During warm-up, coasting or a cadence
+            interruption stops trainer control and freezes the clock; you can resume deliberately
+            after Stop is confirmed. Once the ramp begins, an interruption invalidates the attempt.
+            Cancel and reaching the ceiling without declaring your limit leave FTP unchanged. There
+            is no ramp intensity adjustment.
           </p>
           <label>
             <input type="checkbox" checked={ready} onChange={(e) => setReady(e.target.checked)} />{' '}
@@ -226,20 +231,24 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
           <div className="eyebrow">
             {c.phase === 'waiting'
               ? 'WAITING FOR STEADY PEDALING'
-              : c.phase === 'stopping'
-                ? 'STOPPING TRAINER'
-                : ramp
-                  ? 'RAMP · ONE MINUTE AT A TIME'
-                  : 'WARM UP'}
+              : c.phase === 'paused'
+                ? 'WARM-UP PAUSED · CLOCK FROZEN'
+                : c.phase === 'stopping'
+                  ? 'STOPPING TRAINER'
+                  : ramp
+                    ? 'RAMP · ONE MINUTE AT A TIME'
+                    : 'WARM UP'}
           </div>
           <h2>
             {c.phase === 'waiting'
               ? 'Pedal above 50 rpm to begin'
-              : c.phase === 'stopping'
-                ? 'Ending your test…'
-                : ramp
-                  ? `Step ${Math.floor((report!.elapsed - ftpWarmupSeconds) / 60) + 1}`
-                  : 'Find a comfortable rhythm'}
+              : c.phase === 'paused'
+                ? 'Let the flywheel slow'
+                : c.phase === 'stopping'
+                  ? 'Ending your test…'
+                  : ramp
+                    ? `Step ${Math.floor((report!.elapsed - ftpWarmupSeconds) / 60) + 1}`
+                    : 'Find a comfortable rhythm'}
           </h2>
           <div className="ftp-metrics">
             <div>
@@ -283,19 +292,28 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
             max={ramp ? 60 : ftpWarmupSeconds}
             value={ramp ? (report!.elapsed - ftpWarmupSeconds) % 60 : report!.elapsed}
           />
-          <p>{c.snapshot?.message}</p>
+          <p>{c.phase === 'paused' ? c.report.reason : c.snapshot?.message}</p>
           <p>
             Stay seated. Do not sprint to raise the result. When you reach your limit, finish the
             effort before cadence falls below 50 rpm.
           </p>
           <div className="ftp-actions">
-            <button
-              className="primary"
-              disabled={c.phase !== 'running' || !ramp}
-              onClick={() => void c.finish('effort')}
-            >
-              I’ve reached my limit
-            </button>
+            {c.phase === 'paused' && (
+              <button className="primary" onClick={() => void c.resumeWarmup()}>
+                Resume warm-up · {report!.startingLoad ?? 50} W
+              </button>
+            )}
+            {c.phase !== 'paused' && (
+              <>
+                <button
+                  className="primary"
+                  disabled={c.phase !== 'running' || !ramp}
+                  onClick={() => void c.finish('effort')}
+                >
+                  I’ve reached my limit
+                </button>
+              </>
+            )}
             <button
               className="secondary"
               disabled={c.phase === 'stopping'}
@@ -305,8 +323,8 @@ export default function FtpTest({ onClose }: { onClose: () => void }) {
             </button>
           </div>
           <p className="fine-print">
-            Escape also stops and invalidates the assessment. Stop may restore the trainer’s
-            previous load.
+            Escape stops control (warm-up pauses; the ramp is invalidated). Stop may restore the
+            trainer’s previous load.
           </p>
         </section>
       )}

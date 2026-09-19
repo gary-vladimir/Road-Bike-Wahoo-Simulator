@@ -1,5 +1,13 @@
 # Implementation status and decisions
 
+## September 18 — failed FTP report reviewed; warm-up recovery
+
+The supplied 3:39.1 attempt stayed at a requested/acknowledged 50 W throughout warm-up, with time-weighted mean power 47.74 W and cadence 70.05 rpm. It never reached the ramp. The legacy report omits the failing observation, so the exact cadence/freshness trigger remains unprovable. The rider clarified normal freewheeling/loss of pedal pressure, not cranks driving the feet. See [evidence review](FTP_LOW_LOAD_REVIEW.md).
+
+Warm-up interruptions now stop trainer control and freeze the clock. After acknowledged Stop, the rider can deliberately resume at the approved starting load with fresh telemetry and a new control session. Completed warm-up time is retained, recovery time is excluded, and restoring cadence never automatically re-arms the trainer. Unknown Stop outcome prevents recovery. Cancellation still saves without changing FTP; the measured ramp remains uninterrupted and any ramp fault invalidates the attempt. This fixes the warm-up lifecycle without bypassing the ERG cadence guard or adding hidden resistance.
+
+Verification: 124 unit tests pass, including zero-watt telemetry, warm-up recovery with excluded rest time, cancellation after pause and unknown-Stop rejection. Three affected browser workflows pass: full FTP result/profile persistence, warm-up coast/resume/cancel, and SIM without FTP. Both production builds and formatting checks pass. The paused warm-up screen was visually inspected. No physical commands were sent; the next rider check is a short warm-up coast/recovery rather than another maximal test.
+
 ## September 18 — low-load FTP feedback and diagnostics
 
 The rider reports that the fixed 50 W FTP warm-up feels too soft to sustain a comfortable cadence, even in the small chainring/middle rear cog. Review found an inflexible setup (all assessments started and warmed up at 50 W), with no evidence yet of a wrong FTMS power opcode or watt scaling. FTP setup now offers explicitly approved 50/75/100 W starting loads. Startup uses the selected load, and the subsequent ramp does not drop below it. Existing workout/diagnostic defaults, fresh-data/cadence guards, Stop handling and command ramp limits remain intact. The UI compares recent measured/acknowledged power and explains ERG cadence behavior. Failed reports now retain the final telemetry observation and command audit rather than only earlier valid readings.

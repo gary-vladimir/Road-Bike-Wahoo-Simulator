@@ -164,7 +164,9 @@ test('FTP ramp uses measured power, saves automatically, survives reload and unl
   await page.getByRole('button', { name: 'Take an FTP test' }).click();
   await expect(page.getByText(`${ftp} W estimated FTP`, { exact: false })).toBeVisible();
 });
-test('FTP cancellation and cadence loss keep existing FTP unchanged', async ({ page }) => {
+test('FTP warm-up coasting pauses, resumes deliberately and cancellation keeps existing FTP unchanged', async ({
+  page,
+}) => {
   await openControlledRoad(page);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByLabel('FTP watts').fill('175');
@@ -174,10 +176,25 @@ test('FTP cancellation and cadence loss keep existing FTP unchanged', async ({ p
   await page.getByRole('button', { name: 'Start FTP test' }).click();
   await expect(page.getByRole('heading', { name: 'Find a comfortable rhythm' })).toBeVisible();
   await page.evaluate(() => Object.assign(window, { mockCadence: 0 }));
-  await expect(page.getByRole('heading', { name: 'FTP unchanged' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Let the flywheel slow' })).toBeVisible();
+  await page.screenshot({ path: 'test-results/ftp-warmup-paused.png' });
+  const stopped = await roadWrites(page);
+  expect(stopped.at(-1)?.[0]).toBe(8);
+  await page.evaluate(() => Object.assign(window, { mockCadence: 80 }));
+  await expect(page.getByRole('heading', { name: 'Let the flywheel slow' })).toBeVisible();
+  expect((await roadWrites(page)).length).toBe(stopped.length);
+  await page.getByRole('button', { name: 'Resume warm-up · 50 W' }).click();
+  await expect(page.getByRole('heading', { name: 'Find a comfortable rhythm' })).toBeVisible();
+  expect((await roadWrites(page)).slice(stopped.length, stopped.length + 3)).toEqual([
+    [0],
+    [5, 50, 0],
+    [7],
+  ]);
+  await page.getByRole('button', { name: 'Cancel test · Stop trainer' }).click();
   await expect(page.getByRole('status')).toContainText('previous FTP was preserved');
   await page.getByRole('button', { name: 'Back to BikeSIM' }).click();
   await expect(page.getByLabel('FTP watts')).toHaveValue('175');
+  await page.evaluate(() => Object.assign(window, { mockCadence: 0 }));
   await page.getByRole('button', { name: 'Take an FTP test' }).click();
   await page.getByRole('checkbox').check();
   const before = (await roadWrites(page)).length;
