@@ -25,6 +25,12 @@ describe('manual upload presentation', () => {
     expect(new TextEncoder().encode(short).length).toBeLessThanOrEqual(254);
     expect(short).not.toContain('\uFFFD');
     expect(fitText('a\0b')).toBe('ab');
+    // Shortened text ends at a word, never mid-word.
+    expect(short.endsWith('…')).toBe(true);
+    expect(short).toMatch(/(Oaxaca|México|🚴)…$/u);
+    const ride = fitText('Recorded trainer power; virtual speed and distance. '.repeat(8));
+    expect(new TextEncoder().encode(ride).length).toBeLessThanOrEqual(254);
+    expect(ride).toMatch(/(Recorded|trainer|power|virtual|speed|and|distance)…$/);
     const s = exportSession();
     s.workout.name = '🚴'.repeat(40);
     s.workout.description = text;

@@ -180,6 +180,8 @@ describe('Strava FIT activity export', () => {
     const s = exportSession();
     s.route = structuredClone(realRoads.find((r) => r.id === 'monte-alban')!);
     s.workout = { ...s.workout, name: 'Monte Albán' };
+    // Accents are dropped, not turned into separators ("Monte-Alba-n").
+    expect(activityFileName(s)).toMatch(/^bikesim-2026-09-11-Monte-Alban-fit-export/);
     const m = decode(sessionFit(s));
     expect(m.sessionMesgs[0].subSport).toBe('virtualActivity');
     const located = m.recordMesgs.filter((r) => r.positionLat !== undefined);

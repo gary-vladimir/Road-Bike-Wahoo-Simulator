@@ -97,7 +97,9 @@ export function fitExportIssue(s: Session): string | null {
 export function activityFileName(s: Session) {
   const name =
     s.workout.name
+      // "Albán" → "Alban": drop the accents that NFKD splits off, not the letters around them.
       .normalize('NFKD')
+      .replace(/\p{M}+/gu, '')
       .replace(/[^a-zA-Z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
       .slice(0, 60) || 'ride';

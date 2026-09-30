@@ -28,16 +28,25 @@ export function activityPresentation(s: Session) {
   return { title, description };
 }
 
-/** FIT field length is one byte, including the string terminator. Keep UTF-8 characters intact. */
+/**
+ * FIT field length is one byte, including the string terminator. Keep UTF-8 characters intact,
+ * and end a shortened text at a word with an ellipsis rather than mid-word.
+ */
 export function fitText(text: string, maxBytes = 254) {
   const encoder = new TextEncoder();
+  const clean = text.replace(/\0/g, '');
+  if (encoder.encode(clean).length <= maxBytes) return clean;
+  const budget = maxBytes - encoder.encode('…').length;
   let result = '',
     bytes = 0;
-  for (const char of text.replace(/\0/g, '')) {
+  for (const char of clean) {
     const size = encoder.encode(char).length;
-    if (bytes + size > maxBytes) break;
+    if (bytes + size > budget) break;
     result += char;
     bytes += size;
   }
-  return result;
+  // Back up to the last word boundary unless that would drop a large part of the text.
+  const boundary = result.search(/\s\S*$/);
+  if (boundary > result.length * 0.6) result = result.slice(0, boundary);
+  return `${result.replace(/[\s.,;:–-]+$/u, '')}…`;
 }
