@@ -17,6 +17,8 @@ export type Settings = {
   trainerControl?: boolean;
   /** Percent of the road slope sent to the trainer in SIM (Zwift-style trainer difficulty). */
   difficulty?: number;
+  /** Countdown and interval sound cues. */
+  sound?: boolean;
   quality: 'high' | 'low';
 };
 export const defaults: Settings = {
@@ -27,6 +29,7 @@ export const defaults: Settings = {
   position: 'hoods',
   trainerControl: false,
   difficulty: 100,
+  sound: true,
   quality: 'high',
 };
 // One shared connection per IndexedDB factory (tests swap the factory between cases).
@@ -223,6 +226,7 @@ export async function restoreBackup(raw: unknown) {
       (!Number.isFinite(b.settings.ftp) || b.settings.ftp < 50 || b.settings.ftp > 600)) ||
     (b.settings.position !== undefined && !Object.hasOwn(ridingPositions, b.settings.position)) ||
     (b.settings.trainerControl !== undefined && typeof b.settings.trainerControl !== 'boolean') ||
+    (b.settings.sound !== undefined && typeof b.settings.sound !== 'boolean') ||
     (b.settings.difficulty !== undefined &&
       (!Number.isFinite(b.settings.difficulty) ||
         b.settings.difficulty < 0 ||

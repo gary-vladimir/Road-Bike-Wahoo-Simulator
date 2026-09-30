@@ -22,7 +22,8 @@ export default function SettingsPage({
     [quality, setQuality] = useState(settings.quality),
     [position, setPosition] = useState<RidingPosition>(settings.position ?? 'hoods'),
     [trainerControl, setTrainerControl] = useState(settings.trainerControl === true),
-    [difficulty, setDifficulty] = useState(settings.difficulty ?? 100);
+    [difficulty, setDifficulty] = useState(settings.difficulty ?? 100),
+    [sound, setSound] = useState(settings.sound !== false);
   const [message, setMessage] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const save = async () => {
@@ -35,6 +36,7 @@ export default function SettingsPage({
       position,
       trainerControl,
       difficulty,
+      sound,
       quality,
     };
     if (
@@ -273,6 +275,22 @@ export default function SettingsPage({
                 <option value="high">High · more roadside detail</option>
                 <option value="low">Low · lighter rendering</option>
               </select>
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                role="switch"
+                aria-label="Sound cues"
+                checked={sound}
+                onChange={(e) => setSound(e.target.checked)}
+              />
+              <span>
+                <strong>Sound cues</strong>
+                <span className="hint">
+                  Countdown beeps and a chime when each interval starts. Mute any time from the ride
+                  screen.
+                </span>
+              </span>
             </label>
           </section>
           <button className="btn btn-primary btn-l">

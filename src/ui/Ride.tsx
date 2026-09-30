@@ -10,7 +10,10 @@ import {
   Plus,
   TrendingDown,
   TrendingUp,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
+import { cues } from './audio';
 import RoadScene, { type RideMotion } from '../scene/RoadScene';
 import { clock, position, totalSeconds } from '../workouts/model';
 import { RideEngine, type Session } from '../ride/engine';
@@ -42,12 +45,15 @@ export default function Ride({
   engine,
   quality,
   difficulty = 100,
+  sound = true,
   onFinish,
 }: {
   engine: RideEngine;
   quality: string;
   /** Percent of road slope the trainer applies (SIM). */
   difficulty?: number;
+  /** Countdown and interval cues. */
+  sound?: boolean;
   onFinish: (session: Session) => void;
 }) {
   const [state, setState] = useState({ ...engine.state });
@@ -55,6 +61,9 @@ export default function Ride({
   const [fullscreenError, setFullscreenError] = useState('');
   const [sceneReady, setSceneReady] = useState(false);
   const [focus, setFocus] = useState(false);
+  const [muted, setMuted] = useState(!sound);
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
   // Real roads load their terrain first; procedural roads (null) need nothing.
   const [ground, setGround] = useState<Ground | null | undefined>(() =>
     engine.session.route?.terrain ? undefined : null,
@@ -131,9 +140,12 @@ export default function Ride({
     if (link && engine.state.phase === 'countdown') void link.start();
     void persist();
     let lastSave = performance.now();
+    // What the cues last announced.
+    let heard = { phase: engine.state.phase, count: 0, block: -1, recovery: false };
     const timer = setInterval(() => {
       const now = performance.now();
       if (!link || link.ready) engine.tick(now, trainer.snapshot.telemetry);
+      if (!mutedRef.current) heard = announce(heard);
       motion.current = {
         distance: engine.state.distance * 1000,
         speed: engine.state.speed,
@@ -184,6 +196,27 @@ export default function Ride({
     };
   }, [engine, sceneReady]);
 
+  function announce(heard: { phase: string; count: number; block: number; recovery: boolean }) {
+    const { phase, countdown, elapsed } = engine.state;
+    const count = Math.ceil(countdown);
+    const armed = !link || link.ready;
+    if (phase === 'countdown' && armed && count <= 3 && count >= 1 && count !== heard.count)
+      cues.tick();
+    if (phase === 'running' && heard.phase === 'countdown') cues.go();
+    if (phase === 'finished' && heard.phase !== 'finished') cues.finish();
+    let block = heard.block;
+    if (!route && phase === 'running') {
+      const now = position(session.workout, elapsed);
+      if (heard.block >= 0 && now.index !== heard.block) {
+        const before = session.workout.blocks[heard.block];
+        cues.interval(now.block.from + now.block.to > before.from + before.to);
+      }
+      block = now.index;
+    }
+    const recovery = !!link?.snapshot?.recovery;
+    if (recovery && !heard.recovery) cues.easing();
+    return { phase, count, block, recovery };
+  }
   const current = position(session.workout, state.elapsed),
     next = session.workout.blocks[current.index + 1];
   const terrain = route ? routePosition(route, state.distance * 1000) : null;
@@ -284,6 +317,15 @@ export default function Ride({
             onClick={() => setFocus(!focus)}
           >
             {focus ? <Eye size={19} /> : <EyeOff size={19} />}
+          </button>
+          <button
+            className="hud-btn"
+            aria-label={muted ? 'Turn sound cues on' : 'Mute sound cues'}
+            aria-pressed={!muted}
+            title={muted ? 'Turn sound cues on' : 'Mute sound cues'}
+            onClick={() => setMuted(!muted)}
+          >
+            {muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
           </button>
           <button
             className="hud-btn"

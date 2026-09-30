@@ -172,6 +172,7 @@ export default function App() {
         engine={engine}
         quality={settings.quality}
         difficulty={settings.difficulty ?? 100}
+        sound={settings.sound !== false}
         onFinish={(s) => {
           setEngine(null);
           setSummary(s);
