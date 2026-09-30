@@ -1,10 +1,10 @@
 # BikeSIM
 
-A local, single-rider cycling simulator for the existing road bike and KICKR CORE 2. SIM road riding is the default experience, with four procedural Oaxaca-inspired routes, free pacing, elevation profiles, and coasting physics. ERG power workouts have their own library with eight presets and an editor. Rides save locally and export FIT activities for manual Strava upload. The opt-in control build supports automatic SIM terrain on all four current roads; the default build supports demo and read-only Bluetooth riding.
+A private, local cycling simulator for one rider: a Giant Contend AR 1 on a Wahoo KICKR CORE 2, training for triathlon in Oaxaca. Ride real Oaxaca roads in 3D with the trainer following the terrain, or follow structured workouts with the trainer holding your watts. Everything runs in Chrome on this Mac; rides stay in the browser and export to Strava as FIT files.
 
-## Run locally — Docker only
+## Quick start (Docker only)
 
-Docker Desktop must be running. From this repository, use the infrastructure commands below; all Node/npm commands execute inside the devcontainer.
+Docker Desktop must be running. Node and npm run only inside the devcontainer.
 
 ```sh
 docker compose -f .devcontainer/compose.yaml up -d --build
@@ -12,97 +12,90 @@ docker compose -f .devcontainer/compose.yaml exec bikesim npm ci
 docker compose -f .devcontainer/compose.yaml exec bikesim npm run dev
 ```
 
-Open [BikeSIM on this Mac](http://localhost:5186) in Chrome. Port 5186 is bound to `127.0.0.1`; container port 5173 is not exposed to the LAN. Keep the same browser profile and URL to access the same saved rides.
+Open <http://localhost:5186> in Chrome. The port is bound to `127.0.0.1` only. Keep using the same browser profile and URL: that is where your rides and settings live.
 
-Alternatively, open the repository in a Dev Containers-compatible editor and choose **Reopen in Container**. Dependencies install through `postCreateCommand`; run `npm run dev` in the container terminal. No host-side Node, Bluetooth bridge, or package installation is required. The browser itself executes the frontend JavaScript, WebGL, and Web Bluetooth calls.
+Editors with Dev Containers support can instead **Reopen in Container** and run `npm run dev` in its terminal.
 
-## Try it
+## What you can ride
 
-Start on **Ride**, choose a road, and select **Start road demo**. Adjust demo effort or press **Coast** during the ride. Hills occur at fixed distances; rider effort and road forces determine virtual speed. No FTP or cadence target is required. Completion is based on route distance, with a six-hour session limit. Settings defaults to the rider-confirmed **70 kg** and **700×32C tubeless tires**; bike mass remains an editable **9 kg estimate**. Tire dimensions and circumference are editable; 2155 mm is a geometric estimate, not a measured rollout.
+**Real Oaxaca roads.** Built from OpenStreetMap and SRTM elevation, with the real terrain around them and a live map in the ride screen ([how they are made](docs/REAL_ROADS.md)).
 
-Try **Descent to the valley → Coast**: fresh zero watts and zero cadence continue accumulating distance downhill. Gravity can accelerate a descent from rest, while drag limits speed. On the flat, momentum decays gradually; uphill it decays faster and stops without rolling backward. Pausing or losing live telemetry explicitly freezes the ride, unlike coasting. See [physics assumptions and verification](docs/ROAD_PHYSICS.md).
+| Road                | Distance | Climb  | Steepest | Character                                            |
+| ------------------- | -------- | ------ | -------- | ---------------------------------------------------- |
+| Monte Albán         | 10.6 km  | +388 m | 13.9%    | From the Zócalo up the Carretera Ramal to the ruins  |
+| San Felipe del Agua | 6.0 km   | +151 m | 6.7%     | Steady climb from El Llano into the sierra foothills |
+| El Tule to Mitla    | 34.5 km  | +363 m | 8.7%     | Long valley road past Tlacolula; endurance miles     |
+| Teotitlán del Valle | 3.7 km   | +81 m  | 6.4%     | Short, gentle rise toward the weaving village        |
 
-The refreshed scene has aligned road paint, textured terrain, mesquite trees and a mountain backdrop. Use the **Focus on the road** eye button beside fullscreen to reduce the HUD while retaining metrics and Pause/Stop. Route-library images are captured from the simulator and load without running 3D in the background. See [visual design, asset provenance and limitations](docs/VISUAL_REFRESH.md).
+**Practice roads.** Valley warm-up (3 km), Rolling foothills (6 km), Descent to the valley (2 km, for feeling coasting and momentum) and The steady ascent (5 km).
 
-For a structured power workout:
+**Workouts.** 25 presets across recovery, endurance, tempo, sweet spot, threshold, VO2max, anaerobic, hills, torque, cadence and race pace, drawn from [cycling_presets.md](cycling_presets.md). Each shows planned TSS and IF and how relevant it is to triathlon; the Ride page suggests one for today. Customize any preset into your own copy. Workouts ride on their own generated road that climbs where the hard intervals are.
 
-If you do not know your FTP, choose **Workouts → Take an FTP test** (also in Settings). In the trainer-control build, a guided absolute-watt ramp assessment estimates FTP from your best measured minute and automatically saves a valid result. Cancelled or unreliable attempts preserve your existing FTP. See [protocol, limitations and local assessment history](docs/FTP_ASSESSMENT.md).
+**FTP ramp test.** Workouts → **Take an FTP test** (with trainer control on) estimates FTP as 75% of your best measured minute and saves it to Settings ([protocol](docs/FTP_ASSESSMENT.md)).
 
-1. Open **Workouts** and select a preset. **First five minutes** is the shortest supplied preset.
-2. Choose **Demo · simulated rider** and start. Demo uses an explicitly labeled 200 W FTP example unless you enter your own FTP in Settings.
-3. Follow the countdown, power target, cadence cue, and interval profile. Adjust intensity, pause/resume, or stop with the buttons. `Space` or `Escape` pauses; resuming requires an explicit click.
-4. Finish the ride to see the summary. **Download FIT for Strava** exports the activity for manual upload; JSON and CSV are also available. History, custom workouts, profile settings, and periodic ride checkpoints persist in IndexedDB.
-5. Use **Customize workout** to save an editable copy. Add/delete intervals and change their duration, starting/ending FTP percentage, and cadence target.
+Every ride source can be:
 
-## Export a ride to Strava
+- **Demo**: a simulated rider with an effort slider, for trying things without the bike.
+- **Live power**: real KICKR power drives the ride; the trainer's load is left alone.
+- **Trainer sets the slope / holds the watts**: BikeSIM controls the KICKR (see below).
 
-1. Finish and save your ride, or open a saved ride from **Ride history**.
-2. Click **Download FIT for Strava** on its summary.
-3. Click **Open Strava file upload**, select the `.fit` file, review the activity, and save it in Strava.
+During a ride, Space or Esc pauses (resuming is always a click), ↑/↓ change workout intensity (80–110%) or demo effort, the eye button hides everything but the essentials, and the speaker button mutes the countdown and interval cues. The summary shows normalized power, IF, TSS and time in zones when your FTP is known; History adds 7- and 28-day totals.
 
-The file includes recording timestamps, active duration, pause events, power (including zero-watt coasting), available cadence, and virtual speed/distance. It is explicitly marked as an indoor cycling **activity**, not a workout prescription or GPS course. New rides preserve actual pause durations; older rides use their saved start and active-time timeline because pause durations were not recorded. Recovered rides export up to their last saved checkpoint. Empty rides cannot export FIT. Demo files and their summary are clearly marked as simulated data.
+## Riding with the KICKR
 
-The export panel also offers a matching title and description to copy into Strava if its importer ignores the embedded FIT text.
+**Pair.** Click **Pair your KICKR** at the top right, then **Pair KICKR via Bluetooth**, pick the KICKR in Chrome's chooser and pedal. Pairing only reads power, cadence and speed; it never changes the load. A page refresh restores the telemetry connection when Chrome allows it; otherwise pair again.
 
-Generation happens locally and needs no Strava account connection or API credentials. BikeSIM does not upload anything automatically. Strava supports manual FIT import; final classification and derived statistics are determined by Strava. No GPS route, heart rate, or calorie estimate is invented. See [export details and verification](docs/STRAVA_EXPORT.md).
+**Let BikeSIM control the load.** In **Settings → Trainer**, turn on **Let BikeSIM control my KICKR**. It is off by default, a backup import never turns it on, and even when it is on the load only changes during a ride you start:
 
-## Connect the KICKR
+| During a controlled ride              | Road (SIM)                                                   | Workout (ERG)                                                                |
+| ------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Start                                 | Flat road before the countdown                               | 50 W once you pedal above 50 rpm                                             |
+| Riding                                | Road slope × trainer difficulty; you shift as outdoors       | Interval targets, rising at most 25 W per second                             |
+| Stop pedaling                         | Coasting is fine; gravity still moves you downhill on screen | After 3 s below 50 rpm it eases to 50 W; spin above 55 rpm for 2 s to return |
+| Pause (button, Space/Esc, hidden tab) | Holds a flat road                                            | Holds 50 W                                                                   |
+| Finish                                | Leaves the trainer on a flat road                            | Leaves the trainer on a flat road                                            |
+| Connection or command fault           | Tries FTMS Stop, pauses the ride and explains                | Same                                                                         |
 
-In Chrome on this Mac, open **Trainer → Pair KICKR via Bluetooth**, select the trainer, and pedal gently. macOS/Chrome may request Bluetooth permission. The diagnostic screen reports fresh watts, available cadence/speed, features, supported power range, and connection events.
+BikeSIM never sends FTMS Stop in normal riding, because Stop hands the KICKR back to its own default load, which feels heavier. **Trainer difficulty** (default 100%) scales only what your legs feel on hills; the screen and your virtual speed always use the real grade. The trainer slope stays within −10% to +12%, so Monte Albán's 13.9% ramp feels like 12%.
 
-The default configuration **disables trainer control**. Pairing subscribes to telemetry and reads FTMS characteristics; it never sets workout load. There are no calibration, reset, or firmware update commands.
+Before the first controlled ride: in the Wahoo app, set the same rider weight and wheel size as BikeSIM's Settings (the KICKR uses its own profile in SIM), then close the Wahoo app, Zwift and anything else that controls the trainer. For ERG, Wahoo recommends the small chainring and a middle cog. The trainer page (the same top-right chip) has a manual check for feeling small slope or power changes and comparing the two ways to end control. Details, safeguards and the pending hardware checklist: [trainer control](docs/TRAINER_CONTROL.md).
 
-After pairing, choose **KICKR · live power, read-only** on Ride to explore the road using actual power without an FTP requirement. You choose your cadence and physical gears; BikeSIM does not infer gear position or multiply measured power by a gear ratio. **Resistance remains whatever the trainer was already doing**, so read-only pairing is not an unload operation. See [baseline and physical setup](docs/TRAINER_SETUP.md).
+## Physics
 
-Live power workouts require your known FTP. In read-only mode their targets are guidance; the opt-in **KICKR · automatic ERG workout** source controls target watts. Virtual speed is estimated from power, rider/bike mass, and grade; trainer-reported speed is shown only in diagnostics. Fresh power is required; losing it pauses either kind of ride.
+Virtual speed comes from measured power and road forces, never from the trainer's flywheel or your gearing: gravity and rolling resistance for your weight plus the bike, aerodynamic drag for your riding position in Oaxaca's thinner air (about 1,550 m), and wheel inertia. Coasting keeps momentum, gains speed down real descents and slows on climbs; riders brake for hairpins. See [road physics](docs/ROAD_PHYSICS.md).
 
-In the opt-in control build below, **Ride → Valley warm-up → KICKR · automatic SIM terrain** connects the tested SIM controller to route distance. Confirm readiness and matching Wahoo profile, then select **Start SIM road ride**. Startup applies flat SIM before the countdown; after that, slope follows terrain while you shift naturally. The HUD distinguishes visual grade from the last acknowledged trainer slope. Pause, Stop, keyboard Stop, lost visibility, and telemetry/control faults end control. Resume explicitly starts a fresh control session; Finish waits for shutdown before opening the saved summary. Session JSON includes acknowledged slope transitions and control outcomes in its events.
+## Strava
 
-All four current routes support automatic SIM, including Rolling foothills (−3.5% to +4%). Road control uses a bounded −4% to +5% envelope with 0.25 percentage-point steps no more than once per second. Selecting a different route clears readiness and shows its slope range. Valley, Rolling foothills completion and SIM pause/resume are rider-confirmed; fault recovery remains a physical check. The separate diagnostic test stays at ±1%. Wi-Fi transport remains unavailable. See [hardware validation](docs/HARDWARE_TESTS.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+Finish a ride, click **Download FIT for Strava**, then **Open Strava file upload** and choose the file. Real roads export as virtual rides with the road's positions and elevation, so Strava draws the map without putting you on real-world segments; practice roads and workouts export as indoor rides. Nothing is uploaded automatically. See [FIT export](docs/STRAVA_EXPORT.md).
 
-Automatic ERG connects workout intervals, ramps and intensity adjustments to target power. Choose a workout, select **KICKR · automatic ERG workout**, review its watt range and confirm readiness. It waits for fresh power/cadence above 50 rpm, starts at 50 W for the countdown, then ramps toward interval targets by at most 10 W per second. The complete 80–110% intensity range must fit within 40–600 W and the trainer's supported range; each ride has its own ceiling. Pause/Stop and faults end control; deliberate resume starts a fresh 50 W session. The HUD separates measured, requested and acknowledged watts. See [ERG operation and physical validation](docs/ERG_WORKOUTS.md); no physical tracking accuracy is claimed from software tests.
+## Development
 
-## Supervised SIM and ERG pilots
+All commands run in the container, for example `docker compose -f .devcontainer/compose.yaml exec bikesim npm test`.
 
-A separate diagnostic panel supports HT-2 and HT-3 hardware validation. Stop the existing BikeSIM development server before starting this opt-in server:
+| Command                              | What it checks                                                                                |
+| ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `npm run typecheck`                  | TypeScript                                                                                    |
+| `npm test`                           | Unit tests: physics, trainer session, course, terrain, FIT, storage, workouts                 |
+| `npm run test:browser`               | Playwright workflows against the running dev server, with a synthetic KICKR                   |
+| `npm run format:check`               | Prettier                                                                                      |
+| `npm run build`                      | Production build                                                                              |
+| `node tests/visual/capture.mjs`      | Screenshots of every page into `test-results/visual/` (`--previews` refreshes the road cards) |
+| `node scripts/build-routes.mjs [id]` | Rebuilds real roads from OpenStreetMap and SRTM (needs internet)                              |
 
-```sh
-docker compose -f .devcontainer/compose.yaml exec -e VITE_TRAINER_CONTROL=pilot bikesim npm run dev
-```
+Install Playwright's browser once with `npx playwright install --with-deps chromium`. Tests use synthetic Bluetooth and software rendering; they do not prove GPU frame rate, physical resistance or real Bluetooth behavior.
 
-Reload Chrome while control is stopped and open **Trainer**. Pairing remains read-only. The **SIM · terrain test** remains available for isolated slope checks; the rider already confirmed its slope response. End Wahoo's control session and confirm its rider/tire profile matches BikeSIM; the FTMS SIM payload does not transmit those profile values. Confirm a comfortable baseline and readiness, then **Start flat SIM test**. Select slopes from −1% through +1%; changes are limited to 0.25 percentage points per second. Fresh zero watts and zero cadence remain valid. Use physical gears naturally. No ERG power command is sent in SIM.
+Code map: `src/ride` (engine, physics, course, roads, workouts on the trainer, FTP test), `src/trainer` (Web Bluetooth, FTMS encoding, the control session), `src/scene` (terrain tiles, road, props, sky), `src/pages` and `src/ui` (interface), `src/export` (FIT), `src/storage` (IndexedDB). How the 3D world is built: [scene](docs/SCENE.md).
 
-The separate **ERG · power test** retains the 50–100 W diagnostic. Select readiness and **Start 50 W test**; it waits without resistance commands until fresh power/cadence and at least 50 rpm arrive. Target changes are limited to 10 W per second. ERG's low-cadence cutoff does not apply to SIM.
+## Data and privacy
 
-Both tests have explicit Stop, visibility/freshness/timing checks, exclusive browser ownership, and serialized acknowledged writes. Telemetry stays connected after an acknowledged stop; an uncertain control failure closes the link. Stop does not prove physical unloading, and the previous heavier load may return. A disconnected or crashed browser cannot guarantee reduced resistance. Select readiness again to start a new test on the same connection.
+No accounts, analytics, CDNs or remote fonts; after setup the app works offline. Rides, workouts, settings and FTP tests live in this browser profile's IndexedDB (not encrypted). Download a backup from Settings before clearing browser data or switching browsers. A ride interrupted by a refresh is saved as interrupted and never restarts on its own.
 
-A full page refresh ends the browser's GATT session. BikeSIM attempts to restore **telemetry only** using the previously selected device and Chrome's `getDevices()` permission API. No control session or readiness is restored. If that API or saved permission is unavailable, use **Pair KICKR via Bluetooth**. The current Mac Chrome configuration did not restore its saved permission in the September 7 check, so seamless reconnection is not verified on this machine. **Reconnect KICKR** reuses the selected device within the current page without reopening the chooser. An intentional Disconnect disables refresh restoration for that tab. See [Chrome's saved-device sample](https://googlechrome.github.io/samples/web-bluetooth/get-devices.html) and [implementation status](https://github.com/WebBluetoothCG/web-bluetooth/blob/main/implementation-status.md).
+## Credits
 
-Hot replacement is disabled in pilot mode so edits cannot replace an active controller. Reload only after stopping the test or ride. The Compose default remains `off`; automatic SIM/ERG ride sources are available only in the opt-in build. Export the separate control test log from the test panel, or session JSON from the ride summary for acknowledged target events.
+- Road geometry © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL), routed with [OSRM](https://project-osrm.org/).
+- Elevation from [Mapzen Terrain Tiles on AWS](https://registry.opendata.aws/terrain-tiles/) (SRTM and other public sources).
+- Barlow and Barlow Condensed fonts by Jeremy Tribby (SIL Open Font License), bundled.
+- FIT encoding with Garmin's [FIT JavaScript SDK](https://github.com/garmin/fit-javascript-sdk).
+- Ground and tree textures generated for this project; prompts and receipts are in `assets/` ([history](docs/history/VISUAL_REFRESH.md)).
 
-The **Check ERG target response** panel shows selected, acknowledged, and measured watts separately, alongside cadence and time at target. Hold a target for twenty seconds after acknowledgement if comfortable; the table excludes the first ten seconds and repeated/stale packets from its averages. The current rider observation is that test termination brings back a heavier load: **Stop ends the test but is not an unload command**. See the September 9 HT-2 record before another test.
-
-Evidence includes up to 1,200 half-second observations, raw machine-status bytes, and the command audit. It saves locally every five seconds, at test end, and for twenty seconds afterward. **Export last saved test** retrieves the latest checkpoint after reload without restoring control. An abrupt closure can lose the latest samples. This diagnostic record has a separate export and is not part of the ride backup. Trainer-reported power may be smoothed and does not independently verify physical load.
-
-## Checks
-
-```sh
-docker compose -f .devcontainer/compose.yaml exec bikesim npm test
-docker compose -f .devcontainer/compose.yaml exec bikesim npm run build
-docker compose -f .devcontainer/compose.yaml exec bikesim npx playwright install --with-deps chromium
-docker compose -f .devcontainer/compose.yaml exec bikesim npm run test:browser
-```
-
-Keep `npm run dev` running for the browser tests. Tests execute inside Docker and use synthetic telemetry and software-rendered Chromium; they do not validate the Mac GPU, physical resistance, or actual Bluetooth behavior. The unit suite includes a six-hour simulated timing/physics soak. FTMS fixtures are synthetic specification fixtures, not device captures.
-
-To stop the development container without deleting dependencies or browser downloads:
-
-```sh
-docker compose -f .devcontainer/compose.yaml stop
-```
-
-## Data and limits
-
-No accounts, analytics, remote fonts, CDN assets, or automatic uploads. The app runs without internet after setup; development dependencies require internet to install. Local storage is browser-profile storage, not app-level encryption. Download a backup in Settings before clearing browser data or changing browser/profile/origin. Imports merge IDs; matching records are replaced transactionally. A refreshed/closed ride is listed as interrupted and never restarts automatically.
-
-The scene is a procedural environment, not a surveyed Oaxaca route. Route grade affects virtual speed and the scene; automatic SIM controls physical resistance within the road envelope in the opt-in build. Route sessions retain their profile, SIM mode, mass, wheel setup, and physics version in history/backups; their recorded target watts are zero to represent no power prescription. Real GPX routes, detailed Blender assets, and automatic training prescriptions remain future work. Strava transfer uses the manual FIT file workflow above.
+Project history, decisions and hardware findings: [implementation status](docs/IMPLEMENTATION_STATUS.md) and [hardware log](docs/HARDWARE_TESTS.md).

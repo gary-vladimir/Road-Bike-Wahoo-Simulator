@@ -1,5 +1,7 @@
 # Automatic ERG workouts
 
+> **Historical (September 17, 2026).** Describes the retired opt-in pilot build. Current ERG behavior: [trainer control](../TRAINER_CONTROL.md).
+
 Implemented September 17, 2026 in the opt-in trainer-control build. This connects the existing workout library and editor to physical target-power control. SIM roads remain the normal free-riding mode.
 
 ## Start and ride

@@ -1,12 +1,14 @@
 # Flywheel momentum and the next physical check
 
-**Subsequent September 10 update:** the Wahoo SIM comparison below is complete by rider report: realistic added slope resistance and natural shifting, with 700×32C confirmed. Rider weight is 70 kg. The bounded BikeSIM SIM pilot and improved coasting physics are now implemented; [HT-3](HARDWARE_TESTS.md) is the next manual check. The original analysis below is retained as the reasoning/evidence record, not a request to repeat the Wahoo comparison.
+> **Historical evidence review.** Findings about a ride or test file at the time; the app has changed since. Current behavior: [trainer control](../TRAINER_CONTROL.md).
+
+**Subsequent September 10 update:** the Wahoo SIM comparison below is complete by rider report: realistic added slope resistance and natural shifting, with 700×32C confirmed. Rider weight is 70 kg. The bounded BikeSIM SIM pilot and improved coasting physics are now implemented; [HT-3](../HARDWARE_TESTS.md) is the next manual check. The original analysis below is retained as the reasoning/evidence record, not a request to repeat the Wahoo comparison.
 
 September 10, 2026. This review changes the next diagnostic step: stop repeating the low-power ERG test to establish road feel. No trainer-control commands were sent during this review.
 
 ## What the new evidence shows
 
-The [latest captured test](../tests/fixtures/kickr-erg-2026-09-10.json) contains only a 50 W target. During the initial running period, the trainer repeatedly reported 49–53 W while calculated cadence rose from approximately 56 to 79 rpm. Later samples include dips in reported power. The panel's settled average is 42.0 W at 73.8 rpm over 21 distinct samples, so this is not a uniformly accurate 50 W interval or evidence for 75/100 W tracking.
+The [latest captured test](../../tests/fixtures/kickr-erg-2026-09-10.json) contains only a 50 W target. During the initial running period, the trainer repeatedly reported 49–53 W while calculated cadence rose from approximately 56 to 79 rpm. Later samples include dips in reported power. The panel's settled average is 42.0 W at 73.8 rpm over 21 distinct samples, so this is not a uniformly accurate 50 W interval or evidence for 75/100 W tracking.
 
 At approximately 31.9 seconds after Request Control, cadence changes from 78 rpm to zero while power reports 50 W. BikeSIM sends Stop around 32.0 seconds; the next sampled cadence is 71 rpm. That single zero triggers the current ERG guard. It could reflect actual disengagement/coasting, calculated-cadence dropout, or reporting lag; the log cannot distinguish them. Wahoo documents that the trainer [calculates cadence](https://support.wahoofitness.com/hc/en-us/articles/115001671364-Does-the-KICKR-Smart-Trainer-Measure-Cadence-or-Heart-Rate). A reported zero is not independent proof that the rider stopped moving their feet.
 

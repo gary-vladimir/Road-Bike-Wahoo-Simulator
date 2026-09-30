@@ -1,10 +1,22 @@
 # Hardware validation log
 
+## September 29 — new control lifecycle awaiting a physical check
+
+Trainer control was rebuilt (see [implementation status](IMPLEMENTATION_STATUS.md)). What the rider confirmed earlier still describes the hardware: read-only telemetry, SIM slope response, complete controlled SIM rides with pause/resume, and manual Strava import. The new behavior has only been exercised against a synthetic KICKR:
+
+- pauses hold a light load (flat road or 50 W) instead of sending Stop,
+- finishing leaves the trainer on a flat road instead of sending Stop,
+- ERG ignores brief 0 rpm readings and eases to 50 W after three seconds of low cadence,
+- faster but bounded ramps (ERG +25 W/s, SIM ±0.5 points/s), trainer difficulty scaling, and real-road slopes up to +12%,
+- real-road rides export as virtual rides with positions.
+
+No trainer-control commands were sent by development tools. The step-by-step check is in [trainer control](TRAINER_CONTROL.md#hardware-checklist-pending); add its results here.
+
 ## September 17 — Rolling foothills completion and FIT reviewed
 
-The rider completed the 6 km automatic SIM route and reports plausible feel. The [FIT review](FOOTHILLS_RIDE_REVIEW.md) confirms integrity, a complete 983.306-second ride, monotonic distance, expected signed grades and realistic zero-watt coasting behavior. Positive-power records occasionally have zero cadence; this remains a sensor/estimation question rather than evidence of perfect telemetry. Physical load tracking cannot be reconstructed from FIT alone.
+The rider completed the 6 km automatic SIM route and reports plausible feel. The [FIT review](history/FOOTHILLS_RIDE_REVIEW.md) confirms integrity, a complete 983.306-second ride, monotonic distance, expected signed grades and realistic zero-watt coasting behavior. Positive-power records occasionally have zero cadence; this remains a sensor/estimation question rather than evidence of perfect telemetry. Physical load tracking cannot be reconstructed from FIT alone.
 
-Automatic ERG workouts are now implemented with [separate workout grants and a documented manual check](ERG_WORKOUTS.md). Software verification does not establish physical ERG tracking; no trainer commands were sent by development tools.
+Automatic ERG workouts are now implemented with [separate workout grants and a documented manual check](history/ERG_WORKOUTS.md). Software verification does not establish physical ERG tracking; no trainer commands were sent by development tools.
 
 ## September 17 — SIM pause/resume and Strava import confirmed
 
@@ -16,7 +28,7 @@ The export now marks all rides as indoor cycling and adds workout title/descript
 
 ## September 16 — automatic Valley completion confirmed
 
-The rider completed the 3 km Valley warm-up using automatic SIM terrain, reported realistic resistance and live data, and supplied the downloaded FIT. Official Garmin decoding confirms file integrity, 476.6 seconds of riding and continued distance during zero-watt coasts. See the [ride review](VALLEY_RIDE_REVIEW.md) for measurements and inferred slopes. The observed shallow-downhill slowdown is consistent with rolling/air drag exceeding gravity.
+The rider completed the 3 km Valley warm-up using automatic SIM terrain, reported realistic resistance and live data, and supplied the downloaded FIT. Official Garmin decoding confirms file integrity, 476.6 seconds of riding and continued distance during zero-watt coasts. See the [ride review](history/VALLEY_RIDE_REVIEW.md) for measurements and inferred slopes. The observed shallow-downhill slowdown is consistent with rolling/air drag exceeding gravity.
 
 This establishes the complete start-to-finish ride and export flow on the physical setup. It does not establish mid-ride pause/resume (the FIT contains no pause), physical load after Stop, connection-loss recovery or Strava import. Those portions of the protocol below remain pending. No additional physical trainer commands were sent during development.
 
@@ -72,7 +84,7 @@ Observations to record: macOS/Chrome versions, device firmware if available thro
 
 ## HT-2 — Supervised low-load ERG control
 
-Status: **actual target/start/stop acknowledgements captured; physical watt tracking remains unresolved**. Default builds keep it disabled. Before repeating this test, follow [physical setup and baseline guidance](TRAINER_SETUP.md). The rider reports about 150 W at 50 rpm in the large chainring; the cadence threshold is not evidence of an easy starting load. On September 9 the rider felt a strong load reduction during the test and heavier load returning afterward. Stop must not be presented as unloading.
+Status: **actual target/start/stop acknowledgements captured; physical watt tracking remains unresolved**. Default builds keep it disabled. Before repeating this test, follow [physical setup and baseline guidance](history/TRAINER_SETUP.md). The rider reports about 150 W at 50 rpm in the large chainring; the cadence threshold is not evidence of an easy starting load. On September 9 the rider felt a strong load reduction during the test and heavier load returning afterward. Stop must not be presented as unloading.
 
 Implemented prerequisites: HT-1 recorded, actual supported ranges known, request/power/start/stop payloads checked, an exclusive browser lock, serialized writes with matching indications, 2.5-second acknowledgement timeout without retries, fresh power/cadence guards, minimum 50 rpm cadence, 100 W pilot ceiling, 10 W/second ramp limit, stop priority, and synthetic fault tests. This tab lock cannot exclude Wahoo or other native controllers. The rider must be present and ready before any load changes.
 

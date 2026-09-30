@@ -1,5 +1,7 @@
 # Rolling foothills FIT review — September 17, 2026
 
+> **Historical evidence review.** Findings about a ride or test file at the time; the app has changed since. Current behavior: [trainer control](../TRAINER_CONTROL.md).
+
 The rider reports completing the 6 km automatic SIM road with plausible resistance. The supplied file passes Garmin FIT SDK integrity checks and decodes without errors. This review corroborates a complete recorded ride, not independent trainer calibration.
 
 | Measurement                      | Result                                                 |

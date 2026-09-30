@@ -1,5 +1,7 @@
 # Valley warm-up ride review — September 16, 2026
 
+> **Historical evidence review.** Findings about a ride or test file at the time; the app has changed since. Current behavior: [trainer control](../TRAINER_CONTROL.md).
+
 The rider completed automatic SIM terrain, felt slope resistance, saw live telemetry, and downloaded the activity. Garmin's FIT SDK 21.214.0 validates the supplied file's integrity and decodes it without errors.
 
 | Recorded value                  | Result                             |

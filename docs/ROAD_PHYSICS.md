@@ -1,47 +1,63 @@
 # Road physics and rider setup
 
-September 10, 2026. The rider confirmed 70 kg, stock Giant Contend AR tubeless 700×32C tires, and realistic slope response/shifting in Wahoo Simulation. BikeSIM defaults to these rider/tire values. Existing custom settings are preserved; this Mac's Chrome profile was explicitly saved with the confirmed values. Bike mass remains a disclosed 9 kg estimate.
+Physics version 3, September 29, 2026 (`src/ride/physics.ts`). Saved rides record their physics version, masses, wheel, riding position and air density, so older rides keep their original numbers.
 
 ## Motion
 
-Speed is integrated from rider power and road forces, not copied from trainer-reported speed or inferred from cadence. For forward speed `v`, total rider/bike mass `m`, and angle `atan(grade / 100)`:
+Virtual speed comes from measured power and road forces. It is never copied from the trainer's flywheel speed or inferred from cadence and gearing. For speed `v`, rider plus bike mass `m`, road angle `θ = atan(grade / 100)` and head wind `w`:
 
 ```
-drive force = 0.97 × max(power, 0) / max(v, 0.75 m/s)
-road force = m × 9.81 × (sin(angle) + 0.004 × cos(angle))
-air force = 0.18 × (v + headwind) × abs(v + headwind)
-acceleration = (drive force − road force − air force) / m
+drive    = 0.97 × max(power, 0) / max(v, 0.75 m/s)
+gravity  = −m g sin θ                       (pulls you downhill)
+rolling  = m g Crr cos θ
+air      = ½ ρ CdA (v + w) |v + w|
+braking  = up to 3.5 m/s² when a corner ahead needs a lower speed
+a        = (drive + gravity − rolling − air − braking) / (m + 1.7 kg)
 ```
 
-Still air is the default. Rolling coefficient, wind coefficient (kg/m), and efficiency are assumptions, not calibrated measurements. The 0.75 m/s floor bounds launch force because crank torque and selected gear are unknown; walking-speed behavior is approximate.
+| Input               | Value                                                  | Source                                                  |
+| ------------------- | ------------------------------------------------------ | ------------------------------------------------------- |
+| Rider mass          | 70 kg                                                  | Rider-confirmed; Settings                               |
+| Bike mass           | 9 kg                                                   | Estimate; Settings                                      |
+| Riding position CdA | Upright 0.40, **hoods 0.32**, drops 0.29, aero 0.25 m² | Typical road values; Settings                           |
+| Air density ρ       | 1.00 kg/m³ at 1,550 m (sea level 1.20)                 | Standard atmosphere at the road's start altitude, 20 °C |
+| Rolling Crr         | 0.004                                                  | Good tires on smooth asphalt; assumption                |
+| Wheel inertia       | +1.7 kg effective mass while accelerating              | ≈ I/r² for a pair of 700C wheels                        |
+| Drivetrain          | 97% efficient                                          | Assumption                                              |
+| Wind                | Still air                                              |                                                         |
 
-The engine samples terrain along the traveled path at intervals no longer than 50 ms and integrates forces in steps no longer than 10 ms. It resolves a stop within a step so an uphill coast cannot add distance after reaching zero. Speed is forward-only, with a numerical ceiling of 150 km/h. Backward rolling and rider braking are not modeled yet.
+The 0.75 m/s floor bounds launch force, because crank torque and the selected gear are unknown at walking pace. The engine samples the course at most every 50 ms and integrates in steps of at most 10 ms, independent of frame rate. Speed is forward-only (no rolling backward) with a numerical ceiling of 150 km/h. On descents, the rider brakes for corners whose curvature over the next 60 m needs more than about 0.35 g; gentle bends never limit speed.
 
-- Downhill: gravity can exceed rolling/air resistance. Zero watts can accelerate from rest and accumulate distance until drag balances gravity.
-- A shallow descent can still slow a moving rider: the force balance, not just the negative grade sign, determines acceleration. At the default 79 kg total mass and still air, −0.5% has a constant-grade coasting equilibrium around 7.5 km/h; −3% around 38 km/h. Entering faster slows you toward that balance. Shallower than roughly −0.4% cannot sustain forward coasting against the assumed rolling resistance.
-- Flat: zero watts retains momentum, then drag and rolling resistance reduce speed.
-- Uphill: zero watts retains momentum briefly, but climbing consumes it faster. The bike stops progressively.
-- Fresh zero power/cadence is valid live data. Stale power pauses the ride; it is not interpreted as coasting.
-- Explicit Pause freezes progress and resets speed. Resume requires a countdown; this differs from leaving the pedals still.
+Oaxaca's altitude matters: at 1,550 m the air is about 17% thinner than at sea level, so the same power goes about 6% faster on the flat.
 
-The scene follows the physics engine's distance rather than accumulating separate render-frame distance. The HUD derives its coasting trend from the integrator's shared force calculation, distinguishing acceleration, drag-limited balance and slowing even on descents. Sessions retain mass, wheel setup, and `physicsVersion: 2` in JSON exports/backups; FIT includes signed virtual route grade.
+## Reference speeds
 
-## Wheel size and physical gears
+Default setup (70 + 9 kg, hoods, 1,550 m, still air), steady state:
 
-Settings supports rim diameter, tire width, and a measured circumference override. 700×32C corresponds to 32-622 ([Schwalbe size table](https://www.schwalbe.com/media/97/93/b4/1700219698/Reifengroessen-uebersicht_EN.pdf)). The default 2155 mm is rounded `π × (622 + 2 × 32)`, a geometric estimate. Actual pressure, casing shape, and load affect rollout; it is not a manufacturer measurement.
+| Power | Flat      | 6% climb  | −3% descent |
+| ----- | --------- | --------- | ----------- |
+| 100 W | 27.7 km/h |           |             |
+| 150 W | 32.5 km/h |           |             |
+| 200 W | 36.2 km/h | 13.5 km/h | 52.2 km/h   |
+| 250 W | 39.3 km/h | 16.5 km/h |             |
 
-Circumference converts virtual speed to virtual wheel RPM. It does not multiply measured watts or determine speed from cadence. Current gear and raw KICKR flywheel inertia are unavailable through the telemetry used here. Physical shifting and trainer inertia already exist in the hardware; adding guessed flywheel energy to measured power would distort motion. This virtual translational model does not reproduce exact flywheel/freehub behavior.
+At 200 W on the flat: upright 33.8, hoods 36.2, drops 37.4, aero 39.1 km/h; hoods at sea level 34.2 km/h.
 
-## Physical resistance boundary
+**Coasting** at 0 W settles toward the speed where gravity balances drag: about 8 km/h on −0.5%, 19 km/h on −1%, 40 km/h on −3% and 59 km/h on −6%. Shallower than about −0.4% you cannot coast forward against rolling resistance. Entering a descent faster than its balance speed slows you toward it, which is why a gentle descent can still feel like slowing down. The HUD shows whether you are gaining speed, holding steady or slowing, from the same force balance.
 
-The explicitly armed SIM controller sends slope, still-air wind, rolling coefficient 0.004, and wind coefficient 0.18. Road sessions use −4% to +5%; manual diagnostics retain ±1%. Both limit changes to 0.25 percentage points no more than once per second. All four current roads are available in the opt-in build. Flat startup is road load, not unloading. SIM does not prescribe watts or require pedaling during coasting.
+- Fresh 0 W and 0 rpm is valid live data: you coast. Stale power for 3 s pauses the ride instead.
+- Pause freezes progress and speed; resuming starts from a stop after a countdown.
 
-FTMS simulation parameters contain no rider-mass or wheel-size field ([Bluetooth SIG test specification](https://files.bluetooth.com/wp-content/uploads/dlm_uploads/2024/10/FTMS.TS_.p6.pdf)). BikeSIM Settings does not rewrite Wahoo's trainer profile. Before control starts, the rider verifies that profile and ends Wahoo control. Exported setup values record confirmed app settings, not trainer profile readback. The rider confirmed BikeSIM's physical slope response on September 11 and completed automatic Valley warm-up on September 16. SIM pause/resume was confirmed September 17. Cross-app profile persistence and fault recovery remain [hardware checks](HARDWARE_TESTS.md).
+## Trainer load matches the physics
 
-The opt-in build supports controlled roads whose full profile stays within −4% to +5%, without clamping physical grade to a different hill. Higher grades were enabled after the rider confirmed Valley completion and pause/resume; their physical feel remains to be checked. The controller follows the same distance-based grade as the physics engine; the HUD exposes the last acknowledged slope because rate limiting and acknowledgement delays can temporarily lag the route. Startup/resume applies flat SIM before the countdown. Virtual downhill motion can continue while the physical flywheel slows; gravity in the game does not promise to motor-drive a trainer.
+In SIM, BikeSIM sends the KICKR the same Crr (0.004) and a wind coefficient Cw = ½ρ·CdA (0.16 kg/m on the hoods at 1,550 m), with no wind. The grade is the course grade at your distance, scaled by trainer difficulty and kept within −10% to +12%. The KICKR combines these with the rider weight and wheel size from its own profile in the Wahoo app, because FTMS simulation carries neither. Keep that profile matching Settings. See [trainer control](TRAINER_CONTROL.md).
+
+Your gears stay real: shifting changes cadence and pedal force on the KICKR, and the physics sees only the resulting power. BikeSIM does not guess a gear or multiply power by a ratio.
+
+## Wheel size
+
+Settings holds rim diameter, tire width and an optional measured circumference. 700×32C is 32-622; the default 2,155 mm is `π × (622 + 2 × 32)` rounded, a geometric estimate rather than a measured rollout. Circumference converts virtual speed to wheel rpm for the record; it does not change speed or power.
 
 ## Verification
 
-Unit regressions compare zero-watt downhill terminal speed against analytical force balance, uphill stopping and subsequent zero distance, downhill/flat/uphill ordering, mass effects, and integration across update rates. Live rides with fresh zero power/cadence and zero trainer-reported speed still move downhill. Storage tests cover defaults, independent settings copies, wheel/session round trips, and invalid imports.
-
-Synthetic GATT tests cover exact SIM startup/slope payloads, ramps in both directions, zero cadence, exclusive ERG/SIM ownership, readiness rejection, cancellation during startup, stale-data Stop acknowledgement, and retained telemetry after Stop. Browser checks exercise profile persistence, visible zero-watt downhill distance, and the SIM panel. These verify software behavior, not physical resistance or outdoor accuracy.
+Unit tests compare zero-watt terminal speeds with the analytical balance, check uphill stops without backward distance, altitude and position effects, wheel inertia, corner braking and integration across tick rates. Engine tests cover stale data, pauses and a six-hour simulated soak. These verify the model, not outdoor accuracy: CdA, Crr and bike mass are disclosed assumptions.

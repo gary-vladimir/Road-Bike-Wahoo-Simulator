@@ -1,63 +1,51 @@
-# Manual Strava activity export
+# Strava export (FIT)
 
-Implemented September 11, 2026. This fulfills the file-export requirement independently of trainer-control validation. There is no OAuth, Strava API client, automatic upload, or server component.
+BikeSIM writes a standard FIT activity file locally; you upload it to Strava yourself. There is no Strava account connection, API client or automatic upload. Current as of September 29, 2026.
 
-## September 17 update
+## Workflow
 
-The rider confirmed successful manual Strava import. New exports use `cycling` / `indoorCycling` consistently instead of `virtualActivity` for SIM roads, following the requested indoor classification. Strava documents activity-type detection from session sport/sub-sport and stationary detection for files without coordinates ([upload specification](https://developers.strava.com/docs/uploads/)). This supplies explicit indoor metadata; final behavior of Strava's manual-import UI still needs a fresh-file check.
+1. Finish a ride (or open one from **History**).
+2. Click **Download FIT for Strava**, then **Open Strava file upload** and choose the file.
+3. Review the activity on Strava and save it. **Title and description for Strava** has matching text with copy buttons, because Strava does not read a FIT file's name or description into the activity.
 
-The FIT now also contains standard `workout.wktName`, `workout.wktDescription` and `session.sportProfileName`. The file remains an Activity, with zero prescribed workout steps in the metadata message. Text fields are limited to 254 UTF-8 bytes without splitting characters. Title and complete description are available under **Title and description for Strava**, with copy buttons and selectable fields if clipboard access is denied. The description reports actual recorded duration/distance and distinguishes partial, recovered and demo rides.
+Exporting again produces the same file with the original timestamps; Strava may reject it as a duplicate. Demo rides are labeled DEMO in the file name, metadata and summary. Rides shorter than a second cannot export FIT; JSON and CSV remain available.
 
-Strava does not document importing these FIT text fields as its activity title/description; its API accepts those as separate upload parameters. The local/manual workflow therefore cannot promise automatic text population. Paste the supplied text on Strava's review screen when necessary. Exporting an older saved ride applies current metadata but preserves original recording times; uploading it again may be rejected as a duplicate. No fabricated GPS, device identity or undocumented trainer flag is added.
+## What the file contains
 
-The updated metadata is decoded in unit tests with Garmin's SDK, including UTF-8 limits and consistent indoor classification. Browser checks verify real file downloads, title/description copy, saved-history redownloads, zero external upload requests and desktop/mobile layout.
+The file is a FIT **Activity** encoded with Garmin's official [`@garmin/fitsdk`](https://github.com/garmin/fit-javascript-sdk), loaded only when you export. It identifies itself as BikeSIM, not as a Wahoo or Garmin device.
 
-## Rider workflow
+| Ride             | FIT sport / sub-sport          | Positions and altitude | Grade per record |
+| ---------------- | ------------------------------ | ---------------------- | ---------------- |
+| Real Oaxaca road | cycling / **virtual activity** | Yes, along the road    | Yes              |
+| Practice road    | cycling / indoor cycling       | No                     | Yes              |
+| Workout          | cycling / indoor cycling       | No                     | No               |
 
-Finish and save a BikeSIM ride. On the summary, click **Download FIT for Strava**, then **Open Strava file upload**. Select the downloaded `.fit` file, review its activity details/privacy in Strava, and save it there. Saved rides have the same export through **Ride history → select a ride**. Exporting again retains the original timestamps and content; Strava may reject an activity it already has. Rename the activity on Strava's review screen if desired.
+For real roads, latitude, longitude and altitude come from the road's own geometry at the distance you had ridden, never from a GPS recording. Strava draws the map and counts the climb; virtual activities stay off real-world segment leaderboards.
 
-Use a live-power ride for real training data. Demo exports remain available for software checks but have DEMO in their filename and file metadata, and the summary explicitly identifies simulated exercise. Empty/under-one-second rides disable FIT with an explanation. JSON and CSV remain available independently.
+| BikeSIM data           | In the file                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Start and end          | UTC timestamps (whole seconds)                                                                                               |
+| Pauses                 | Timer stop/start events; no fake zero-power samples while paused                                                             |
+| Power                  | Measured watts per record, including real 0 W coasting                                                                       |
+| Cadence                | When the trainer reported it; missing cadence stays missing                                                                  |
+| Speed and distance     | Virtual speed and distance from the physics                                                                                  |
+| Lap and session totals | Timer and elapsed time, distance, average/max speed, average/max/normalized power, work, average cadence (coasting excluded) |
+| With an FTP            | Intensity factor, TSS and threshold power                                                                                    |
+| Real roads             | Total ascent ridden                                                                                                          |
+| Name and description   | Session profile name and workout name/description (Strava may ignore them)                                                   |
 
-## File contents
+No heart rate, calories or target watts presented as measured power are invented.
 
-The exporter uses Garmin's official `@garmin/fitsdk` version 21.214.0. It is loaded only when exporting, keeping the encoder out of the initial ride bundle. Files use the FIT **Activity** type (4), with file ID, sport, timestamped records, timer events, one lap, one session, and one activity message. File identity uses the development manufacturer and BikeSIM product name; it does not impersonate Wahoo or a Garmin device.
+## Recording rules
 
-| BikeSIM data               | FIT representation                                                      |
-| -------------------------- | ----------------------------------------------------------------------- |
-| Recording start/end        | UTC `start_time` and `timestamp`; FIT whole-second precision            |
-| Active session seconds     | `total_timer_time` in session/lap/activity                              |
-| Wall time including pauses | `total_elapsed_time` in session/lap                                     |
-| Pause/resume               | Timer Start / Stop All events; no fake zero-power samples during pauses |
-| Recorded power             | Record watts, including genuine zero-watt coasting                      |
-| Available cadence          | Record rpm; missing cadence stays absent                                |
-| Virtual distance           | Cumulative record and summary meters, converted from km                 |
-| Virtual speed              | Record m/s, converted from km/h; average/max speed summary              |
-| Virtual route grade        | Signed record grade in percent at FIT 0.01% precision; route rides only |
-| Activity classification    | Cycling + indoor cycling sub-sport in every ride export                 |
-| Title and description      | Session profile name + workout name/description; Strava may ignore text |
+Recording starts when the countdown ends. Paused time and resume countdowns count toward elapsed time but not timer time. A ride that stalls (hidden tab, stale power) stops its timer at the last valid tick. Recovered, interrupted rides export up to their last saved checkpoint. Older rides that did not record pause durations are rebuilt from their start time and active time, and the summary says so.
 
-There are no fabricated GPS coordinates, outdoor altitude, heart rate, calories, or workout-target watts presented as measured power. Strava derives its own averages and may classify or display the activity differently. The procedural environment does not supply a real geographic route.
+The exporter validates units, ranges, chronological order and timer consistency before encoding, and never modifies the saved ride.
 
-Signed grade was added September 16. It describes the recorded virtual road, not acknowledged trainer slope; decorative workout hills are excluded. Strava may not display this field. The rider's first completed Valley FIT passed Garmin decoding and integrity checks, with genuine zero-watt coasting distance; manual Strava import was confirmed September 17.
+## History and checks
 
-## Recording and compatibility
+The rider confirmed manual Strava import of a real ride on September 17. Real-road virtual activities with positions, and the session power totals, were added on September 29 and still need a fresh upload to confirm how Strava shows them (map, climb, classification).
 
-New rides anchor UTC to the monotonic browser clock, start recording after the initial countdown, retain real pause/resume timestamps, and save the final partial sample before Pause/Finish clears speed. Initial countdown/preparation does not count toward active time. Resume countdowns and pauses remain outside timer time. A stalled/hidden/stale-data ride stops its timer at the last valid integrated tick; no activity is fabricated during the gap.
+Unit tests decode every generated file with Garmin's decoder and check integrity, message structure, timing, pauses, zero-watt coasting, missing cadence, real-road positions against the route, virtual versus indoor classification and totals. Browser tests download files from new and saved rides and verify that nothing is sent to Strava.
 
-Older sessions lack wall-clock samples and pause durations. Their export reconstructs timestamps from the saved session date plus active elapsed seconds, with this limitation shown on the summary. They remain downloadable without modifying saved data. Recovered interrupted sessions close any open timer at the last saved recording time; their final distance can be exported without inventing missing power/cadence.
-
-The exporter validates units, finite values, supported ranges, chronological readings, and consistent timer data before encoding. Multiple observations in one FIT second retain the last observation; original subsecond samples remain in JSON/CSV. A boundary distance record reconciles the final odometer with session/lap totals. Encoding and downloads never modify the original session.
-
-## Verification and external boundary
-
-Unit tests decode generated files with Garmin's decoder and verify header/CRC integrity, required messages, UTC start, pause duration, units, zero-watt coasting, missing cadence, deterministic repeat exports, old/demo records, interrupted checkpoints, invalid input, and new engine timing/final samples. Browser tests download and decode actual files from saved and newly finished rides, repeat through history/reload, check desktop/mobile layout, and verify no request is sent to Strava during export.
-
-These validate the exported FIT structure and content. No file has been uploaded to the rider's Strava account by the development tools. The rider confirmed manual import of a real ride on September 17; the subsequent metadata changes require a fresh-file classification check.
-
-Final checks: 79 unit tests and 19 browser workflows pass. Default and pilot production builds compile, formatting/whitespace checks pass, and desktop/mobile export layouts were visually reviewed. The existing large Three.js bundle warning remains; the FIT encoder is a separate lazy-loaded bundle.
-
-## References
-
-- [Strava manual upload instructions](https://support.strava.com/en-us/articles/15402066-how-to-get-your-activities-to-strava): FIT, TCX, and GPX files with workout data can be uploaded from a computer.
-- [Strava supported FIT fields](https://developers.strava.com/docs/uploads/): timestamped activity records, sensor fields, session totals, and indoor/virtual sport metadata; GPS is optional.
-- [Official Garmin JavaScript FIT SDK](https://github.com/garmin/fit-javascript-sdk): encoder, decoder, and integrity checks. The dependency retains its FIT Protocol License in `node_modules/@garmin/fitsdk/LICENSE.txt` inside the devcontainer.
+References: [Strava upload formats and FIT fields](https://developers.strava.com/docs/uploads/), [Strava manual upload](https://support.strava.com/en-us/articles/15402066-how-to-get-your-activities-to-strava).

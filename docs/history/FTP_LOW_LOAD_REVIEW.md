@@ -1,5 +1,7 @@
 # Review of the reported loss of pedal pressure
 
+> **Historical evidence review.** Findings about a ride or test file at the time; the app has changed since. Current behavior: [trainer control](../TRAINER_CONTROL.md).
+
 Input: `bikesim-ftp-3beaad99-6926-4434-9fc1-a2f941a42a32.json`, September 18, 2026. The rider clarified that the flywheel coasts freely when pedaling stops; the cranks do not force the rider’s feet around. This supports loss of pedal pressure/freewheeling rather than the originally ambiguous description of the flywheel driving the pedals. It does not independently rule out every mechanical issue.
 
 ## Recorded evidence

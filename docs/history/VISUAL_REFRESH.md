@@ -1,5 +1,7 @@
 # September 15 visual refresh
 
+> **Historical (September 15–16, 2026).** The scene was rebuilt on September 29 and the horizon image retired. Current design: [scene](../SCENE.md). The asset receipts below still apply to the ground and tree textures.
+
 ## September 16 refinement
 
 The mountain image now sits on a curved dome with a fixed world orientation. The dome follows camera translation without following its rotation, so the skyline responds to turns and uphill/downhill pitch instead of sticking to the screen. It represents distant scenery, not nearby mountain geometry.
