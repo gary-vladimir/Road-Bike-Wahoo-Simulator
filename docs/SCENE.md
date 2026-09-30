@@ -39,8 +39,12 @@ With the dev server running in the container:
 
 | Tool                                                                    | Purpose                                                                                    |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `/tests/visual/scene.html?route=monte-alban&distance=2400&quality=high` | Scene at a fixed road position, for inspection in a browser                                |
+| `/tests/visual/scene.html?route=monte-alban&distance=2400&quality=high` | Scene at a road position (meters), for inspection in a browser                             |
 | `node tests/visual/probe.mjs <route> <meters> [quality]`                | Headless screenshot of that harness, with tile-streaming timings                           |
 | `node tests/visual/capture.mjs [--previews]`                            | Screenshots of every page to `test-results/visual/`; `--previews` refreshes the road cards |
+
+Add `&speed=30` to the harness to ride forward at 30 km/h with 10 Hz ticks like a real ride, and `&stats` to show frame rate, 95th-percentile and worst frame time on screen (also `window.__frameStats()`). The tab must be visible; browsers pause hidden tabs.
+
+To check frame pacing on the Mac, open <http://localhost:5186/tests/visual/scene.html?route=monte-alban&distance=1500&speed=30&stats> in Chrome and watch it for a minute: about 60 fps with few frames over 25 ms is smooth. If it stutters, compare `&quality=low`.
 
 In development builds `window.__bikesimScene` exposes the live world, course and camera for debugging. Headless captures use software rendering, so they check layout and composition, not frame rate on the Mac's GPU.

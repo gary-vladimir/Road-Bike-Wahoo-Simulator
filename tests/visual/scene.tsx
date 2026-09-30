@@ -49,6 +49,19 @@ Object.assign(window, {
   },
   __resetFrameStats: () => (intervals.length = 0),
 });
+// `&stats` shows the numbers on screen, refreshed every second.
+if (params.has('stats')) {
+  const panel = Object.assign(document.createElement('pre'), {
+    style:
+      'position:fixed;top:8px;left:8px;margin:0;padding:8px 10px;z-index:1;color:#fff;' +
+      'background:rgba(0,0,0,.6);font:12px/1.4 ui-monospace,monospace;border-radius:6px',
+  });
+  document.body.append(panel);
+  setInterval(() => {
+    const s = (window as unknown as { __frameStats: () => Record<string, number> }).__frameStats();
+    panel.textContent = `${s.fps} fps · p95 ${s.p95} ms · max ${s.max} ms\n${s.over25ms} of ${s.frames} frames over 25 ms · ${s.meters} m`;
+  }, 1000);
+}
 
 const ground = (await loadGround(route)) ?? undefined;
 createRoot(document.getElementById('root')!).render(
