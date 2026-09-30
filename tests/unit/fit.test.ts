@@ -200,4 +200,33 @@ describe('Strava FIT activity export', () => {
     expect(practice.sessionMesgs[0].subSport).toBe('indoorCycling');
     expect(practice.recordMesgs.some((r) => r.positionLat !== undefined)).toBe(false);
   });
+
+  it('carries power, work and cadence totals, and IF/TSS once FTP is known', () => {
+    // Samples cover 8 s (gaps count at most 2.5 s): 150 W for 1 s, coasting, 100 W, 120 W.
+    const practice = decode(sessionFit(exportSession()));
+    const totals = {
+      avgPower: 69,
+      maxPower: 150,
+      normalizedPower: 69,
+      totalWork: 550,
+      // Coasting at 0 rpm is left out of the average.
+      avgCadence: 77,
+    };
+    expect(practice.sessionMesgs[0]).toMatchObject(totals);
+    expect(practice.lapMesgs[0]).toMatchObject(totals);
+    expect(practice.sessionMesgs[0]).not.toHaveProperty('intensityFactor');
+    expect(practice.sessionMesgs[0]).not.toHaveProperty('totalAscent');
+
+    const s = exportSession();
+    s.ftp = 200;
+    s.route = structuredClone(realRoads.find((r) => r.id === 'monte-alban')!);
+    const real = decode(sessionFit(s));
+    expect(real.sessionMesgs[0]).toMatchObject({
+      ...totals,
+      intensityFactor: 0.344,
+      thresholdPower: 200,
+    });
+    expect(real.sessionMesgs[0].trainingStressScore).toBeGreaterThanOrEqual(0);
+    expect(real.sessionMesgs[0].totalAscent).toBeGreaterThanOrEqual(0);
+  });
 });
