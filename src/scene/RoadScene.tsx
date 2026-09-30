@@ -3,6 +3,7 @@ import {
   Component,
   type MutableRefObject,
   type ReactNode,
+  Suspense,
   memo,
   useLayoutEffect,
   useRef,
@@ -259,14 +260,18 @@ function RoadScene({
           toneMappingExposure: 1.02,
         }}
       >
-        <World
-          course={course}
-          ground={ground}
-          motion={motion}
-          speed={speed}
-          quality={quality}
-          onReady={onReady}
-        />
+        {/* Textures load inside the canvas. Without this boundary R3F suspends the Canvas
+            itself, and an outer boundary would hide and re-show it. */}
+        <Suspense fallback={null}>
+          <World
+            course={course}
+            ground={ground}
+            motion={motion}
+            speed={speed}
+            quality={quality}
+            onReady={onReady}
+          />
+        </Suspense>
       </Canvas>
     </SceneBoundary>
   );
