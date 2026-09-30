@@ -25,6 +25,9 @@ export default defineConfig({
       },
     },
   ],
+  // three.js alone is ~700 kB. It lives in the lazily loaded scene chunk, which is expected to be
+  // large; the app shell stays small.
+  build: { chunkSizeWarningLimit: 1000 },
   // Never hot-swap code under an active trainer-control session: reload deliberately instead.
   server: {
     hmr: false,

@@ -124,6 +124,11 @@ export default function App() {
     setSessions(rides);
   };
   useEffect(() => {
+    // Fetch the 3D world while the rider chooses a road, so the ride starts without a wait.
+    const warm = setTimeout(() => void import('./scene/RoadScene').catch(() => {}), 2000);
+    return () => clearTimeout(warm);
+  }, []);
+  useEffect(() => {
     void trainer.restore();
     void refresh()
       .catch(() =>

@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ComponentType,
+} from 'react';
 import {
   ChevronRight,
   Eye,
@@ -14,7 +23,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import { cues } from './audio';
-import RoadScene, { type RideMotion } from '../scene/RoadScene';
+import type { default as Scene, RideMotion } from '../scene/RoadScene';
 import { clock, position, totalSeconds } from '../workouts/model';
 import { RideEngine, type Session } from '../ride/engine';
 import { trainer } from '../trainer/bluetooth';
@@ -27,6 +36,15 @@ import { ElevationProfile, RouteMap, WorkoutProfile } from './charts';
 import { loadGround } from '../scene/terrain-data';
 import type { Ground } from '../scene/ground';
 import { BrandMark } from './kit';
+
+function SceneUnavailable({ onReady }: { onReady?: () => void }) {
+  useEffect(() => onReady?.(), [onReady]);
+  return <div className="scene-fallback">3D is unavailable. Your ride metrics still work.</div>;
+}
+/** three.js and the 3D world load with the first ride; the other pages never need them. */
+const RoadScene = lazy<ComponentType<ComponentProps<typeof Scene>>>(() =>
+  import('../scene/RoadScene').catch(() => ({ default: SceneUnavailable })),
+);
 
 /** Steepest grade within the next stretch of road, for the look-ahead hint. */
 function ahead(route: Route, meters: number, span = 300) {
@@ -266,14 +284,16 @@ export default function Ride({
     >
       <div className="ride-scene">
         {ground !== undefined && (
-          <RoadScene
-            course={engine.course}
-            ground={ground ?? undefined}
-            motion={motion}
-            moving={running}
-            quality={quality}
-            onReady={onSceneReady}
-          />
+          <Suspense fallback={null}>
+            <RoadScene
+              course={engine.course}
+              ground={ground ?? undefined}
+              motion={motion}
+              moving={running}
+              quality={quality}
+              onReady={onSceneReady}
+            />
+          </Suspense>
         )}
       </div>
       <div className="ride-scrim-top" />
