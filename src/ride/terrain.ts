@@ -22,7 +22,28 @@ export type Route = {
   id: string;
   name: string;
   description: string;
+  /** Grade profile by distance: the source of truth for physics and elevation. */
   points: { meters: number; grade: number }[];
+  /** Real roads: centerline in local meters (x east, z south), one point every `pathStep` m. */
+  path?: [number, number][];
+  pathStep?: number;
+  /** Absolute elevation at the start, in meters. */
+  startElevation?: number;
+  /** Terrain height model shipped with a real road. */
+  terrain?: TerrainGrid;
+  /** Data sources to credit, for real roads. */
+  attribution?: string;
+};
+/** A regular height grid in the route's local meters (uint16 samples: height = offset + v × scale). */
+export type TerrainGrid = {
+  file: string;
+  x0: number;
+  z0: number;
+  spacing: number;
+  columns: number;
+  rows: number;
+  offset: number;
+  scale: number;
 };
 export const routes: Route[] = [
   {
@@ -110,6 +131,24 @@ export function validateRoute(route: Route) {
   });
   if (routeLength(route) < 100 || routeLength(route) > 200000)
     throw new Error('Route distance out of range');
+  if (
+    (route.startElevation !== undefined &&
+      (!Number.isFinite(route.startElevation) ||
+        route.startElevation < -500 ||
+        route.startElevation > 6000)) ||
+    (route.path !== undefined &&
+      (!Array.isArray(route.path) ||
+        route.path.length < 2 ||
+        route.path.length > 100000 ||
+        !Number.isFinite(route.pathStep) ||
+        route.pathStep! < 1 ||
+        route.pathStep! > 50 ||
+        route.path.some(
+          (p) => !Array.isArray(p) || p.length !== 2 || !p.every((n) => Number.isFinite(n)),
+        ))) ||
+    (route.attribution !== undefined && typeof route.attribution !== 'string')
+  )
+    throw new Error('Invalid real-road data');
 }
 export const routeLength = (route: Route) => route.points.at(-1)!.meters;
 /** Distance determines terrain; shifting and pacing never change where a hill is. */

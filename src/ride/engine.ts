@@ -1,6 +1,7 @@
 import { position, totalSeconds, validateWorkout, type Workout } from '../workouts/model';
 import type { Telemetry } from '../trainer/ftms';
-import { routeLength, routePosition, validateRoute, type Route } from './terrain';
+import { routeLength, validateRoute, type Route } from './terrain';
+import { Course, WorkoutCourse, routeCourse } from './course';
 import { advance, createSetup, type PhysicsSetup, type RidingPosition } from './physics';
 import { stockWheel, validateWheel, type WheelSetup } from './bike';
 import { workoutControlIssue, workoutTarget } from './workout-control';
@@ -54,6 +55,16 @@ export type Session = {
   samples: Sample[];
   events: { elapsed: number; message: string }[];
 };
+/**
+ * Riders brake for corners: the fastest comfortable speed (km/h) for the sharpest bend in the
+ * next 60 m, at about 0.35 g of cornering. Gentle procedural bends never limit speed.
+ */
+export function cornerSpeed(course: Course, meters: number) {
+  let sharpest = 0;
+  for (const ahead of [0, 10, 20, 30, 45, 60])
+    sharpest = Math.max(sharpest, Math.abs(course.curvature(meters + ahead)));
+  return sharpest < 1e-4 ? 150 : Math.min(150, Math.sqrt(3.5 / sharpest) * 3.6);
+}
 /** Fixed maximum time step prevents suspension from replaying missed workout commands. */
 export class RideEngine {
   state: RideState = {
@@ -75,6 +86,8 @@ export class RideEngine {
   private demoPower = 0;
   /** Physics inputs for this ride (mass, position, air density). */
   readonly setup: PhysicsSetup;
+  /** The road being ridden: shared by physics and the 3D scene. */
+  readonly course: Course;
   demoEffort = 100;
   constructor(
     workout: Workout,
@@ -109,9 +122,9 @@ export class RideEngine {
     validateWheel(options?.wheel ?? stockWheel);
     if (!Number.isFinite(bikeMass) || bikeMass < 4 || bikeMass > 30)
       throw new Error('Bike mass must be 4–30 kg');
-    const position = options?.position ?? 'hoods';
-    this.setup = createSetup({ riderMass: mass, bikeMass, position });
-    this.session = {
+    const riding = options?.position ?? 'hoods';
+    this.setup = createSetup({ riderMass: mass, bikeMass, position: riding });
+    const session: Session = (this.session = {
       id: crypto.randomUUID(),
       workout: structuredClone(workout),
       source,
@@ -120,7 +133,7 @@ export class RideEngine {
       bikeMass,
       wheel: structuredClone(options?.wheel ?? stockWheel),
       physicsVersion: 3,
-      position,
+      position: riding,
       airDensity: this.setup.airDensity,
       mode: options?.route ? 'sim' : 'erg',
       trainerControl: options?.trainerControl,
@@ -132,7 +145,20 @@ export class RideEngine {
       status: 'in-progress',
       samples: [],
       events: [],
-    };
+    });
+    this.course = session.route
+      ? routeCourse(session.route)
+      : new WorkoutCourse(
+          (elapsed, bias) => workoutTarget(session.workout, session.ftp!, elapsed, bias),
+          (elapsed) => position(session.workout, elapsed).block.grade,
+          this.setup,
+          () => ({
+            elapsed: this.state.elapsed,
+            distance: this.state.distance,
+            speed: this.state.speed,
+            bias: this.state.bias,
+          }),
+        );
   }
   tick(now: number, telemetry?: Telemetry) {
     if (this.last === undefined) {
@@ -180,9 +206,8 @@ export class RideEngine {
     this.state.target = this.session.route
       ? 0
       : workoutTarget(this.session.workout, this.session.ftp!, this.state.elapsed, this.state.bias);
-    if (this.session.route)
-      this.state.grade = routePosition(this.session.route, this.state.distance * 1000).grade;
-    else this.state.grade += (current.block.grade - this.state.grade) * (1 - Math.exp(-step / 3));
+    // Roads follow their profile; workouts ride a road generated to match the intervals.
+    this.state.grade = this.course.grade(this.state.distance * 1000);
     if (this.session.source === 'demo') {
       this.demoPower +=
         ((this.session.route ? this.demoEffort : this.state.target) - this.demoPower) *
@@ -209,24 +234,22 @@ export class RideEngine {
     }
     // Sample the terrain along the path, including during a long (but valid) timer step.
     const motionSteps = Math.max(1, Math.ceil(step / 0.05));
+    const cornerLimit = cornerSpeed(this.course, this.state.distance * 1000);
     for (let i = 0; i < motionSteps; i++) {
-      const grade = this.session.route
-        ? routePosition(this.session.route, this.state.distance * 1000).grade
-        : this.state.grade;
       const motion = advance(
         this.state.speed,
         this.state.power ?? 0,
-        grade,
+        this.course.grade(this.state.distance * 1000),
         this.setup,
         step / motionSteps,
+        cornerLimit,
       );
       this.state.speed = motion.speed;
       this.state.distance += motion.distance / 1000;
     }
-    if (this.session.route) {
+    if (this.session.route)
       this.state.distance = Math.min(routeLength(this.session.route) / 1000, this.state.distance);
-      this.state.grade = routePosition(this.session.route, this.state.distance * 1000).grade;
-    }
+    this.state.grade = this.course.grade(this.state.distance * 1000);
     this.sampleElapsed += step;
     this.session.recordedAt = this.wallOrigin! + now - (dt - step) * 1000;
     if (this.sampleElapsed >= 1) {

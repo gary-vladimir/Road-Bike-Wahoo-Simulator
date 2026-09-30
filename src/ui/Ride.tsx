@@ -213,10 +213,9 @@ export default function Ride({
     >
       <div className="ride-scene">
         <RoadScene
+          course={engine.course}
           motion={motion}
           moving={running}
-          grade={state.grade}
-          route={route}
           quality={quality}
           onReady={onSceneReady}
         />
