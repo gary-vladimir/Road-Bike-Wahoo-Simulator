@@ -77,7 +77,14 @@ export class FtpControl {
   }
 
   private observe(snapshot: SessionSnapshot) {
+    const eased = snapshot.recovery && !this.snapshot?.recovery;
     this.snapshot = snapshot;
+    if (eased && this.phase === 'running' && !this.ramp) {
+      // Keep a record of each warm-up pause for the assessment report.
+      const pauses = (this.report.warmupPauses ??= []);
+      if (pauses.length < 50)
+        pauses.push({ elapsed: this.report.elapsed, reason: snapshot.message });
+    }
     if (this.phase === 'waiting' && snapshot.state === 'active') {
       this.phase = 'running';
       this.last = this.now();

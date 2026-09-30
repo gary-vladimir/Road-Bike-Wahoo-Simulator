@@ -120,6 +120,10 @@ describe('FTP assessment on a synthetic trainer', () => {
     expect(control.warmupPaused).toBe(true);
     expect(control.report.elapsed).toBeLessThan(warm + 4);
     expect(watts(f.writes).at(-1)).toBe(50);
+    expect(control.report.warmupPauses).toEqual([
+      { elapsed: expect.closeTo(warm + 3, 0), reason: expect.stringContaining('Low cadence') },
+    ]);
+    expect(() => validateFtpAssessment(control.report)).not.toThrow();
     f.trainer.cadence = 85;
     await ride(10);
     expect(control.warmupPaused).toBe(false);
