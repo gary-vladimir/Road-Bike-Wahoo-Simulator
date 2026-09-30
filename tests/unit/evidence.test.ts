@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  lastGradeAcknowledgement,
   lastPowerAcknowledgement,
-  PilotEvidence,
+  ControlEvidence,
   summarizePlateaus,
-} from '../../src/trainer/pilot-evidence';
-import type { PilotSnapshot } from '../../src/trainer/pilot';
+} from '../../src/trainer/evidence';
+import type { SessionSnapshot } from '../../src/trainer/session';
 import captured from '../fixtures/kickr-erg-2026-09-09.json';
-const snapshot = (watts = 50, at = 1000): PilotSnapshot => ({
-  state: 'running',
-  applied: watts,
-  requested: watts,
+const snapshot = (watts = 50, at = 1000): SessionSnapshot => ({
+  state: 'active',
+  mode: 'erg',
+  recovery: false,
+  appliedWatts: watts,
+  requestedWatts: watts,
+  stopConfirmed: false,
+  releaseConfirmed: false,
   message: '',
   machineStatus: [],
   audit: [{ at, event: 'acknowledgement', bytes: [5, watts, 0], result: 1 }],
@@ -25,23 +30,23 @@ describe('passive ERG response evidence', () => {
     ).toEqual([50, 60, 70, 75, 85, 95, 100]);
     const stop = captured.audit.find((e) => e.event === 'write' && e.bytes[0] === 8)!;
     expect((stop.at - lastPowerAcknowledgement(s)!.at) / 1000).toBeCloseTo(6.4934, 3);
-    const report = new PilotEvidence().report(s);
+    const report = new ControlEvidence().report(s);
     expect(report.plateaus).toEqual([]);
     expect(report.samples).toEqual([]);
     expect(report.message).toContain('Cadence below');
   });
   it('separates requested targets from acknowledgements and excludes refused commands', () => {
     const s = snapshot();
-    s.requested = 100;
+    s.requestedWatts = 100;
     s.audit.push({ at: 2000, event: 'acknowledgement', bytes: [5, 100, 0], result: 4 });
     expect(lastPowerAcknowledgement(s)?.watts).toBe(50);
-    const recorder = new PilotEvidence();
+    const recorder = new ControlEvidence();
     recorder.record(2000, { power: 48, powerAt: 2000, receivedAt: 2000 }, s);
     expect(recorder.samples[0]).toMatchObject({ requested: 100, acknowledged: 50, power: 48 });
     expect(recorder.report(s).plateaus).toEqual([]);
   });
   it('excludes settling, stale, and duplicate sensor packets instead of filling targets as power', () => {
-    const recorder = new PilotEvidence(),
+    const recorder = new ControlEvidence(),
       s = snapshot(100);
     for (let now = 1000; now <= 21000; now += 500) {
       const packetAt = Math.floor(now / 1000) * 1000;
@@ -74,7 +79,7 @@ describe('passive ERG response evidence', () => {
     expect(recorder.report(s).plateaus[0].averagePower).toBe(22);
   });
   it('keeps post-stop load separate, records the reason, and starts a new capture with a short baseline', () => {
-    const recorder = new PilotEvidence(),
+    const recorder = new ControlEvidence(),
       s = snapshot();
     recorder.record(1000, { power: 50, powerAt: 1000, receivedAt: 1000 }, s);
     const stopped = {
@@ -99,10 +104,18 @@ describe('passive ERG response evidence', () => {
     });
   });
   it('bounds recording memory and reports discarded samples', () => {
-    const recorder = new PilotEvidence(),
+    const recorder = new ControlEvidence(),
       s = snapshot();
     for (let now = 0; now < 1300; now++) recorder.record(now, { receivedAt: now }, s);
     expect(recorder.samples).toHaveLength(1200);
     expect(recorder.report(s).droppedSamples).toBe(100);
+  });
+  it('reads acknowledged SIM slopes, including descents', () => {
+    const s = snapshot();
+    s.audit = [
+      { at: 1, event: 'acknowledgement', bytes: [0x11, 0, 0, 0x9c, 0xff, 40, 16], result: 1 },
+      { at: 2, event: 'acknowledgement', bytes: [0x11, 0, 0, 0x2c, 0x01, 40, 16], result: 4 },
+    ];
+    expect(lastGradeAcknowledgement(s)).toEqual({ grade: -1, at: 1 });
   });
 });

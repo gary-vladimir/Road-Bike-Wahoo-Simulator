@@ -1,6 +1,7 @@
 import type { Telemetry } from '../trainer/ftms';
-import type { PilotSnapshot } from '../trainer/pilot';
-import { lastPowerAcknowledgement } from '../trainer/pilot-evidence';
+import type { SessionSnapshot, TrainerSession } from '../trainer/session';
+import { staleTelemetryMs } from '../trainer/session';
+import { lastPowerAcknowledgement } from '../trainer/evidence';
 import {
   estimateFtp,
   ftpDuration,
@@ -11,22 +12,24 @@ import {
   type FtpStartingLoad,
 } from './ftp-test';
 
-type Adapter = {
-  start: (ready: { baselineConfirmed: boolean; trainerProfileConfirmed: boolean }) => Promise<void>;
-  stop: () => Promise<void>;
-  setTarget: (watts: number) => void;
-};
+type Open = (changed: (s: SessionSnapshot) => void) => Promise<TrainerSession>;
+
+/**
+ * Guided ramp test. The warm-up clock runs only while the rider pedals; the trainer eases to the
+ * starting load during pauses. During the ramp, sustained low cadence means the rider reached
+ * their limit, so the test finishes and estimates FTP from the best measured minute.
+ */
 export class FtpControl {
-  phase: 'waiting' | 'running' | 'stopping' | 'paused' | 'finished' = 'waiting';
-  snapshot?: PilotSnapshot;
+  phase: 'waiting' | 'running' | 'finishing' | 'finished' = 'waiting';
+  snapshot?: SessionSnapshot;
   report: FtpAssessment;
-  private adapter?: Adapter;
+  private session?: TrainerSession;
   private pending?: Promise<void>;
   private ending?: Promise<void>;
   private last?: number;
   constructor(
     protocol: FtpProtocol,
-    private prepare: (changed: (s: PilotSnapshot) => void) => Promise<Adapter>,
+    private open: Open,
     private changed: () => void,
     private now = () => performance.now(),
     startingLoad: FtpStartingLoad = 50,
@@ -46,142 +49,118 @@ export class FtpControl {
       stopConfirmed: false,
     };
   }
+
+  get ramp() {
+    return this.report.elapsed >= ftpWarmupSeconds;
+  }
+
+  /** Warm-up is paused while the trainer holds the recovery load. */
+  get warmupPaused() {
+    return this.phase === 'running' && !this.ramp && !!this.snapshot?.recovery;
+  }
+
   start() {
-    this.pending ??= this.arm();
+    this.pending ??= (async () => {
+      try {
+        const session = await this.open((snapshot) => this.observe(snapshot));
+        this.session = session;
+        if (this.ending) {
+          await session.release();
+          return;
+        }
+        session.follow(this.report.startingLoad ?? 50);
+      } catch (error) {
+        void this.finish('fault', (error as Error).message);
+      }
+    })();
     return this.pending;
   }
-  private async arm() {
-    try {
-      this.adapter = await this.prepare((snapshot) => {
-        this.snapshot = snapshot;
-        if (this.phase === 'waiting' && snapshot.state === 'running') {
-          this.phase = 'running';
-          this.last = this.now();
-        } else if (
-          ['waiting', 'running'].includes(this.phase) &&
-          ['stopping', 'stopped', 'faulted'].includes(snapshot.state)
-        ) {
-          void this.interrupt(snapshot.message);
-        }
-        this.changed();
-      });
-      if (this.phase !== 'waiting') {
-        await this.adapter.stop();
-        return;
-      }
-      await this.adapter.start({ baselineConfirmed: true, trainerProfileConfirmed: true });
-    } catch (error) {
-      void this.finish('fault', (error as Error).message);
-    }
+
+  private observe(snapshot: SessionSnapshot) {
+    this.snapshot = snapshot;
+    if (this.phase === 'waiting' && snapshot.state === 'active') {
+      this.phase = 'running';
+      this.last = this.now();
+    } else if (
+      ['waiting', 'running'].includes(this.phase) &&
+      ['ended', 'faulted'].includes(snapshot.state)
+    )
+      void this.finish('fault', snapshot.message);
+    this.changed();
   }
+
   tick(t: Telemetry) {
-    if (this.phase !== 'running') return;
-    // Keep the failing observation too; valid ramp readings alone hide cadence dropouts.
+    if (this.phase !== 'running' || !this.session) return;
     this.recordTelemetry(t);
     const now = this.now();
     const dt = (now - this.last!) / 1000;
     this.last = now;
-    if (!Number.isFinite(dt) || dt <= 0 || dt > 2.5) {
-      if (dt === 0) return;
-      void this.interrupt('Assessment timing was interrupted.');
+    if (!Number.isFinite(dt) || dt < 0 || dt > 2.5) {
+      if (this.ramp) void this.finish('fault', 'Assessment timing was interrupted.');
       return;
     }
+    if (dt === 0) return;
+    if (this.ramp && this.snapshot?.recovery) {
+      // Cadence stayed low for several seconds: the rider could not hold the step.
+      void this.finish('effort', '');
+      return;
+    }
+    if (this.warmupPaused) return;
+    const powerFresh =
+      Number.isFinite(t.power) &&
+      t.powerAt !== undefined &&
+      t.powerAt <= now &&
+      now - t.powerAt <= staleTelemetryMs;
     const ack = this.snapshot && lastPowerAcknowledgement(this.snapshot);
-    if (
-      !ack ||
-      !Number.isFinite(t.power) ||
-      t.power! < 0 ||
-      t.power! > 3000 ||
-      !Number.isFinite(t.cadence) ||
-      t.cadence! < 50 ||
-      t.cadence! > 250 ||
-      ![t.powerAt, t.cadenceAt].every(
-        (at) => at !== undefined && Number.isFinite(at) && at <= now && now - at <= 2500,
-      )
-    ) {
-      void this.interrupt(
-        t.cadence !== undefined && t.cadence < 50
-          ? `Trainer reported ${t.cadence} rpm, below the 50 rpm ERG minimum. Download the report if you were still pedaling steadily.`
-          : 'Power or cadence became unreliable. Check the trainer connection and wait for fresh readings.',
-      );
-      return;
-    }
     const start = this.report.elapsed;
     this.report.elapsed = Math.min(
       ftpDuration(this.report.protocol, this.report.startingLoad),
       start + dt,
     );
-    this.report.readings.push({
-      start,
-      end: this.report.elapsed,
-      power: t.power!,
-      cadence: t.cadence!,
-      target: ftpTarget(this.report.protocol, start, this.report.startingLoad),
-      acknowledged: ack.watts,
-    });
+    if (powerFresh && ack && t.power! >= 0 && t.power! <= 3000)
+      this.report.readings.push({
+        start,
+        end: this.report.elapsed,
+        power: t.power!,
+        cadence: Number.isFinite(t.cadence) ? t.cadence! : 0,
+        target: ftpTarget(this.report.protocol, start, this.report.startingLoad),
+        acknowledged: ack.watts,
+      });
     if (this.report.elapsed >= ftpDuration(this.report.protocol, this.report.startingLoad)) {
       void this.finish(
         'fault',
-        'You reached the test ceiling without declaring your limit. No FTP was set; choose a suitable protocol for a future test.',
+        'You reached the top of this protocol without finishing. No FTP was set; choose the standard ramp next time.',
       );
-    } else {
-      try {
-        this.adapter!.setTarget(
-          ftpTarget(this.report.protocol, this.report.elapsed, this.report.startingLoad),
-        );
-      } catch (error) {
-        void this.finish('fault', (error as Error).message);
-      }
+      return;
+    }
+    try {
+      this.session.follow(
+        ftpTarget(this.report.protocol, this.report.elapsed, this.report.startingLoad),
+      );
+    } catch (error) {
+      void this.finish('fault', (error as Error).message);
     }
     this.changed();
   }
-  private interrupt(reason: string) {
-    return this.finish(
-      this.phase === 'running' && this.report.elapsed < ftpWarmupSeconds ? 'warmup-pause' : 'fault',
-      reason,
-    );
+
+  /** Ease to the starting load (e.g. while the page is hidden) without ending the test. */
+  hold() {
+    this.session?.hold();
   }
-  resumeWarmup() {
-    if (
-      this.phase !== 'paused' ||
-      !this.report.stopConfirmed ||
-      this.report.elapsed >= ftpWarmupSeconds
-    )
-      return Promise.resolve();
-    this.phase = 'waiting';
-    this.adapter = undefined;
-    this.pending = undefined;
-    this.ending = undefined;
-    this.snapshot = undefined;
-    this.last = undefined;
-    this.report.reason = '';
-    this.report.stopConfirmed = false;
-    this.changed();
-    return this.start();
-  }
-  finish(kind: 'effort' | 'cancel' | 'fault' | 'warmup-pause', reason = ''): Promise<void> {
-    // A paused warm-up has already completed shutdown, but must still be cancellable.
-    if (this.phase === 'paused' && kind !== 'warmup-pause') this.ending = undefined;
+
+  finish(kind: 'effort' | 'cancel' | 'fault', reason = ''): Promise<void> {
     if (this.ending) return this.ending;
-    const recoverable =
-      kind === 'warmup-pause' && this.phase === 'running' && this.report.elapsed < ftpWarmupSeconds;
     if (this.currentTelemetry) this.recordTelemetry(this.currentTelemetry());
-    this.phase = 'stopping';
+    this.phase = 'finishing';
     this.report.reason = reason;
     this.ending = Promise.resolve().then(async () => {
       try {
-        await Promise.all([this.adapter?.stop(), this.pending]);
-        this.report.stopConfirmed = this.snapshot?.stopConfirmed === true;
-        if (recoverable && this.report.stopConfirmed) {
-          this.report.warmupPauses ??= [];
-          this.report.warmupPauses.push({ elapsed: this.report.elapsed, reason });
-          this.report.warmupPauses = this.report.warmupPauses.slice(-50);
-          this.report.reason = `Warm-up paused. ${reason} Let the flywheel slow, then resume deliberately when the load feels comfortable.`;
-        } else if (
-          kind === 'effort' &&
-          this.report.stopConfirmed &&
-          this.snapshot?.state === 'stopped'
-        ) {
+        await this.pending;
+        await this.session?.release();
+        const ended = this.snapshot;
+        // A confirmed flat road (or Stop) is required before a result is trusted.
+        this.report.stopConfirmed = !!(ended?.releaseConfirmed || ended?.stopConfirmed);
+        if (kind === 'effort' && this.report.stopConfirmed) {
           const result = estimateFtp(this.report.readings);
           Object.assign(this.report, result, { status: result.ftp ? 'estimated' : 'invalid' });
         } else {
@@ -189,16 +168,13 @@ export class FtpControl {
           this.report.reason ||=
             kind === 'cancel'
               ? 'Assessment cancelled. FTP unchanged.'
-              : 'Trainer shutdown could not be verified. FTP unchanged; physical load is unknown.';
+              : 'Trainer control could not be confirmed. FTP unchanged; check the trainer load.';
         }
       } catch (error) {
         this.report.status = 'invalid';
-        this.report.reason = `Trainer shutdown failed: ${(error as Error).message}. FTP unchanged; physical load is unknown.`;
+        this.report.reason = `Trainer shutdown failed: ${(error as Error).message}. FTP unchanged.`;
       }
-      this.phase =
-        recoverable && this.report.stopConfirmed && this.report.status === 'in-progress'
-          ? 'paused'
-          : 'finished';
+      this.phase = 'finished';
       this.report.controlAudit = this.snapshot?.audit;
       this.report.controlMessage = this.snapshot?.message;
       this.changed();
@@ -206,6 +182,7 @@ export class FtpControl {
     this.changed();
     return this.ending;
   }
+
   private recordTelemetry(t: Telemetry) {
     if (Number.isFinite(t.receivedAt))
       this.report.lastTelemetry = Object.fromEntries(

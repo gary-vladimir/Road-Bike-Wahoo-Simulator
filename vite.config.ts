@@ -25,9 +25,9 @@ export default defineConfig({
       },
     },
   ],
-  // Never replace control code in a browser while a supervised pilot may be active.
+  // Never hot-swap code under an active trainer-control session: reload deliberately instead.
   server: {
-    hmr: process.env.VITE_TRAINER_CONTROL !== 'pilot',
+    hmr: false,
     fs: {
       deny: [
         '.env',

@@ -9,7 +9,7 @@ test('SIM is the default, routes have elevation profiles, and ERG workouts remai
   await page.getByRole('button', { name: /Rolling foothills Six kilometers/ }).click();
   await expect(page.locator('.workout-detail h2')).toHaveText('Rolling foothills');
   await expect(
-    page.getByText('Demo and live previews send no trainer commands.', {
+    page.getByText('Demo and live previews never change trainer load.', {
       exact: true,
     }),
   ).toBeVisible();

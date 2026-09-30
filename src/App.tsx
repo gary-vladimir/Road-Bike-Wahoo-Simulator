@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   ArrowUpRight,
   Bike,
@@ -26,6 +26,7 @@ import {
   type Settings as RiderSettings,
 } from './storage/store';
 import { trainer } from './trainer/bluetooth';
+import { setControlGate } from './trainer/session';
 import Ride from './ui/Ride';
 import WorkoutEditor from './ui/WorkoutEditor';
 import Diagnostics from './ui/Diagnostics';
@@ -54,11 +55,14 @@ export default function App() {
     [error, setError] = useState(''),
     [loaded, setLoaded] = useState(false);
   const device = useSyncExternalStore(trainer.subscribe, trainer.getSnapshot);
-  const [ergReady, setErgReady] = useState(false);
+  // Trainer sessions check the rider's current Settings switch each time one opens.
+  const controlEnabled = useRef(false);
+  controlEnabled.current = settings.trainerControl === true;
+  useEffect(() => setControlGate(() => controlEnabled.current), []);
+  const canControl = settings.trainerControl === true;
   const [ftpTest, setFtpTest] = useState(false);
   const ergIssue = workoutControlIssue(selected, settings.ftp);
   const ergRange = settings.ftp === null ? null : workoutPowerRange(selected, settings.ftp);
-  useEffect(() => setErgReady(false), [selected, settings.ftp, source]);
   const refresh = async () => {
     const [profile, workouts, rides] = await Promise.all([
       loadSettings(),
@@ -130,8 +134,8 @@ export default function App() {
           throw new Error('Enter your known FTP in Settings before starting a live workout.');
       }
       if (source === 'controlled') {
-        if (!ergReady || ergIssue) throw new Error(ergIssue ?? 'Confirm ERG readiness first.');
-        const device = trainer.getPilotDevice('erg');
+        if (ergIssue) throw new Error(ergIssue);
+        const device = trainer.controlSource('erg');
         if (
           device.range.increment !== 1 ||
           device.range.min > 40 ||
@@ -167,7 +171,7 @@ export default function App() {
           performance.now() - device.telemetry.powerAt > 3000)
       )
         throw new Error('Pair your KICKR in Trainer and confirm fresh power before starting.');
-      if (controlled) trainer.getPilotDevice('sim');
+      if (controlled) trainer.controlSource('sim');
       setEngine(
         new RideEngine(routeWorkout(route), source, settings.ftp, settings.mass, {
           route,
@@ -184,6 +188,7 @@ export default function App() {
   if (ftpTest)
     return (
       <FtpTest
+        canControl={canControl}
         onClose={() => {
           void refresh()
             .catch(() => setError('Could not refresh rider settings.'))
@@ -196,6 +201,7 @@ export default function App() {
       <Ride
         engine={engine}
         quality={settings.quality}
+        difficulty={settings.difficulty ?? 100}
         onFinish={(s) => {
           setEngine(null);
           setSummary(s);
@@ -419,42 +425,29 @@ export default function App() {
                 >
                   <option value="demo">Demo · simulated rider</option>
                   <option value="bluetooth">KICKR · live power, read-only</option>
-                  {import.meta.env.VITE_TRAINER_CONTROL === 'pilot' && (
-                    <option value="controlled">KICKR · automatic ERG workout</option>
-                  )}
+                  {canControl && <option value="controlled">KICKR · automatic ERG workout</option>}
                 </select>
               </label>
               <div className="start-note">
                 {source === 'demo'
                   ? `Demo FTP: ${settings.ftp ?? 200} W${settings.ftp === null ? ' (example)' : ''}. No trainer commands.`
                   : source === 'controlled'
-                    ? `ERG follows your workout targets${ergRange ? `: ${ergRange.min}–${ergRange.max} W at ${settings.ftp} W FTP` : ''}. Starts at 50 W, then changes by up to 10 W per second. The HUD shows requested and acknowledged watts separately.`
+                    ? `BikeSIM sets your trainer to each target${ergRange ? ` (${ergRange.min}–${ergRange.max} W at ${settings.ftp} W FTP)` : ''}. It starts at 50 W once you pedal.`
                     : 'Live metrics and target guidance. Automatic resistance is not enabled.'}
               </div>
               {source === 'controlled' && (
                 <>
                   {ergIssue && <p role="alert">{ergIssue}</p>}
                   <p className="fine-print">
-                    Use the small front chainring and a middle rear cog. Keep cadence steady and
-                    above 50 rpm; low or missing cadence pauses ERG. Visual hills do not add slope
-                    resistance in this mode.
+                    Small chainring and a middle cog work best. If your cadence stays low for a few
+                    seconds, the trainer eases to 50 W until you spin back up.
                   </p>
-                  <label className="source-label">
-                    <input
-                      type="checkbox"
-                      checked={ergReady}
-                      onChange={(e) => setErgReady(e.target.checked)}
-                    />
-                    I’m ready for automatic ERG: my FTP and trainer profile are correct, the current
-                    load is comfortable, other trainer apps are closed, and I understand the
-                    selected watt targets and 80–110% intensity adjustment.
-                  </label>
                 </>
               )}
               <button
                 className="primary"
                 onClick={start}
-                disabled={!loaded || (source === 'controlled' && (!ergReady || !!ergIssue))}
+                disabled={!loaded || (source === 'controlled' && !!ergIssue)}
               >
                 <Play size={18} />{' '}
                 {source === 'demo'

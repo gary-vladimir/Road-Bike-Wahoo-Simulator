@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   estimateFtp,
   ftpTarget,
@@ -7,7 +7,15 @@ import {
   type FtpReading,
 } from '../../src/ride/ftp-test';
 import { FtpControl } from '../../src/ride/ftp-control';
-import type { PilotSnapshot } from '../../src/trainer/pilot';
+import { TrainerSession } from '../../src/trainer/session';
+import { lastPowerAcknowledgement } from '../../src/trainer/evidence';
+import {
+  fakeTrainer,
+  resetTrainerClock,
+  run,
+  useTrainerClock,
+  watts,
+} from '../helpers/fake-trainer';
 
 export function ftpReadings(until = 720): FtpReading[] {
   return Array.from({ length: until }, (_, i) => ({
@@ -50,6 +58,11 @@ describe('FTP assessment evidence', () => {
     ]);
     expect(estimateFtp(split).bestMinute).toBeCloseTo(110.4);
   });
+  it('keeps a best minute that contains a spurious 0 rpm reading', () => {
+    const r = ftpReadings(750);
+    r[700].cadence = 0;
+    expect(estimateFtp(r).ftp).toBe(estimateFtp(ftpReadings(750)).ftp);
+  });
   it('rejects short, missing, overshooting or unsupported evidence instead of inventing FTP', () => {
     expect(estimateFtp(ftpReadings(479)).ftp).toBeUndefined();
     expect(estimateFtp(ftpReadings().filter((s) => s.start % 20 !== 0)).ftp).toBeUndefined();
@@ -60,187 +73,120 @@ describe('FTP assessment evidence', () => {
   });
 });
 
-function fixture(wait = false, stopConfirmed = true) {
-  let now = 0;
-  let update!: (s: PilotSnapshot) => void;
-  let snapshot: PilotSnapshot = {
-    state: 'waiting',
-    applied: 50,
-    requested: 50,
-    message: '',
-    audit: [],
-    machineStatus: [],
-  };
-  const targets: number[] = [];
-  let stops = 0;
-  const emit = (s: Partial<PilotSnapshot>) => {
-    snapshot = { ...snapshot, ...s };
-    update(snapshot);
-  };
-  const acknowledge = (watts: number) =>
-    emit({
-      state: 'running',
-      applied: watts,
-      audit: [
-        { at: now, event: 'acknowledgement', bytes: [5, watts & 255, watts >> 8], result: 1 },
-      ],
-    });
+function setup(protocol: 'gentle' | 'standard' = 'gentle') {
+  const f = fakeTrainer();
   const control = new FtpControl(
-    'gentle',
-    async (changed) => {
-      update = changed;
-      return {
-        start: async () => {
-          if (!wait) acknowledge(50);
-        },
-        stop: async () => {
-          stops++;
-          emit({ state: stopConfirmed ? 'stopped' : 'faulted', stopConfirmed });
-        },
-        setTarget: (watts) => {
-          targets.push(watts);
-          acknowledge(watts);
-        },
-      };
-    },
+    protocol,
+    (changed) =>
+      TrainerSession.open(
+        f.source,
+        { mode: 'erg', powerCeiling: protocol === 'gentle' ? 300 : 600 },
+        changed,
+      ),
     () => {},
-    () => now,
+    () => performance.now(),
+    50,
+    () => f.source.telemetry(),
   );
-  const tick = (power?: number, cadence = 80, delay = 1000, stale = false) => {
-    now += delay;
-    control.tick({
-      receivedAt: now,
-      power: power ?? snapshot.applied,
-      cadence,
-      powerAt: stale ? now - 3000 : now,
-      cadenceAt: now,
-    });
-  };
-  return { control, tick, acknowledge, emit, targets, stops: () => stops };
-}
-describe('FTP controller lifecycle', () => {
-  it('freezes a coasting warm-up after Stop, resumes only explicitly and excludes recovery time from the ramp', async () => {
-    const f = fixture();
-    await f.control.start();
-    for (let i = 0; i < 219; i++) f.tick(i === 218 ? 0 : undefined);
-    expect(f.control.phase).toBe('running'); // Zero watts alone is not a cadence fault.
-    f.tick(0, 0);
-    await f.control.finish('warmup-pause');
-    expect(f.control.phase).toBe('paused');
-    expect(f.control.report).toMatchObject({
-      elapsed: 219,
-      status: 'in-progress',
-      stopConfirmed: true,
-    });
-    expect(f.stops()).toBe(1);
-    const commands = f.targets.length;
-    for (let i = 0; i < 60; i++) f.tick(0, 0);
-    f.tick(50, 80);
-    expect(f.control.phase).toBe('paused');
-    expect(f.control.report.elapsed).toBe(219);
-    expect(f.targets.length).toBe(commands);
-    await f.control.resumeWarmup();
-    for (let i = 219; i < 720; i++) f.tick();
-    await f.control.finish('effort');
-    expect(f.control.report).toMatchObject({ status: 'estimated', ftp: 83 });
-    expect(f.control.report.warmupPauses).toHaveLength(1);
-    expect(() => validateFtpAssessment(f.control.report)).not.toThrow();
-  });
-  it('allows cancellation from paused warm-up and never offers recovery after unknown Stop', async () => {
-    const f = fixture();
-    await f.control.start();
-    f.tick();
-    f.tick(0, 0);
-    await f.control.finish('warmup-pause');
-    await f.control.finish('cancel');
-    expect(f.control.phase).toBe('finished');
-    expect(f.control.report.status).toBe('cancelled');
-    const unknown = fixture(false, false);
-    await unknown.control.start();
-    unknown.tick();
-    unknown.tick(0, 0);
-    await unknown.control.finish('warmup-pause');
-    expect(unknown.control.phase).toBe('finished');
-    expect(unknown.control.report.status).toBe('invalid');
-    await unknown.control.resumeWarmup();
-    expect(unknown.control.phase).toBe('finished');
-  });
-  it('waits for arming, records fresh measured power, stops once and returns a validated result', async () => {
-    const f = fixture(true);
-    await f.control.start();
-    f.tick();
-    expect(f.control.report.elapsed).toBe(0);
-    expect(f.targets).toEqual([]);
-    f.acknowledge(50);
-    for (let i = 0; i < 720; i++) f.tick();
-    await f.control.finish('effort');
-    await f.control.finish('cancel');
-    expect(f.stops()).toBe(1);
-    expect(f.control.report).toMatchObject({ status: 'estimated', ftp: 83, stopConfirmed: true });
-    expect(() => validateFtpAssessment(f.control.report)).not.toThrow();
-    const count = f.targets.length;
-    f.tick();
-    expect(f.targets.length).toBe(count);
-  });
-  it.each(['cadence', 'stale', 'timing', 'disconnect'] as const)(
-    'invalidates %s loss without a resumable result',
-    async (fault) => {
-      const f = fixture();
-      await f.control.start();
-      for (let i = 0; i < 720; i++) f.tick();
-      if (fault === 'disconnect') f.emit({ state: 'faulted', message: 'Disconnected' });
-      else
-        f.tick(
-          undefined,
-          fault === 'cadence' ? 0 : 80,
-          fault === 'timing' ? 3000 : 1000,
-          fault === 'stale',
-        );
-      await f.control.finish('effort');
-      expect(f.control.report.status).toBe('invalid');
-      expect(f.control.report.ftp).toBeUndefined();
-      if (fault === 'cadence') expect(f.control.report.lastTelemetry?.cadence).toBe(0);
-      expect(f.control.report.controlAudit).toBeDefined();
-    },
-  );
-  it('does not calculate after cancellation, a ceiling, or unconfirmed Stop', async () => {
-    for (const mode of ['cancel', 'ceiling', 'stop'] as const) {
-      const f = fixture(false, mode !== 'stop');
-      await f.control.start();
-      for (let i = 0; i < (mode === 'ceiling' ? 1860 : 720); i++) f.tick();
-      await f.control.finish(mode === 'cancel' ? 'cancel' : 'effort');
-      expect(f.control.report.ftp).toBeUndefined();
-      expect(f.control.report.status).toBe(mode === 'cancel' ? 'cancelled' : 'invalid');
+  /** The FTP page's 250 ms loop, with a trainer whose measured power follows its ERG target. */
+  const ride = async (seconds: number) => {
+    for (let t = 0; t < seconds * 1000; t += 250) {
+      const ack = control.snapshot && lastPowerAcknowledgement(control.snapshot);
+      if (ack && f.trainer.cadence >= 50) f.trainer.power = ack.watts;
+      control.tick(f.source.telemetry());
+      await run(250);
     }
+  };
+  return { f, control, ride };
+}
+beforeEach(useTrainerClock);
+afterEach(resetTrainerClock);
+describe('FTP assessment on a synthetic trainer', () => {
+  it('waits for pedaling and pauses the warm-up clock at a light load while you stop', async () => {
+    const { f, control, ride } = setup();
+    f.trainer.cadence = 0;
+    await control.start();
+    await ride(5);
+    expect(control.phase).toBe('waiting');
+    expect(f.writes).toEqual([]);
+    f.trainer.cadence = 85;
+    await ride(120);
+    expect(control.phase).toBe('running');
+    const warm = control.report.elapsed;
+    expect(warm).toBeGreaterThan(115);
+    f.trainer.cadence = 0;
+    f.trainer.power = 0;
+    await ride(60);
+    expect(control.warmupPaused).toBe(true);
+    expect(control.report.elapsed).toBeLessThan(warm + 4);
+    expect(watts(f.writes).at(-1)).toBe(50);
+    f.trainer.cadence = 85;
+    await ride(10);
+    expect(control.warmupPaused).toBe(false);
+    expect(control.report.elapsed).toBeGreaterThan(warm + 5);
+    expect(f.writes.some((w) => w[0] === 8)).toBe(false);
+    await control.finish('cancel');
+    expect(control.report.status).toBe('cancelled');
   });
-  it('cancels delayed preparation without starting the trainer', async () => {
-    let release!: () => void;
-    let starts = 0,
-      stops = 0;
-    const c = new FtpControl(
-      'gentle',
-      async () => {
-        await new Promise<void>((r) => {
-          release = r;
-        });
-        return {
-          start: async () => {
-            starts++;
-          },
-          stop: async () => {
-            stops++;
-          },
-          setTarget: () => {},
-        };
-      },
-      () => {},
-    );
-    void c.start();
-    const done = c.finish('cancel');
-    release();
-    await done;
-    expect(starts).toBe(0);
-    expect(stops).toBe(1);
-    expect(c.report.status).toBe('cancelled');
+  it('ignores brief cadence glitches and finishes with a result when cadence stays low', async () => {
+    const { f, control, ride } = setup();
+    await control.start();
+    await ride(300 + 8 * 60);
+    // A one-second 0 rpm glitch mid-ramp changes nothing.
+    f.trainer.cadence = 0;
+    await ride(1);
+    f.trainer.cadence = 85;
+    await ride(30);
+    expect(control.phase).toBe('running');
+    // The rider can no longer turn the pedals over.
+    f.trainer.cadence = 20;
+    await ride(6);
+    expect(control.phase).toBe('finished');
+    expect(control.report.status).toBe('estimated');
+    // Best minute ≈ 120–130 W on the gentle ramp: FTP ≈ 75% of that.
+    expect(control.report.ftp).toBeGreaterThanOrEqual(88);
+    expect(control.report.ftp).toBeLessThanOrEqual(98);
+    expect(control.report.stopConfirmed).toBe(true);
+    expect(f.writes.at(-1)).toEqual([0x11, 0, 0, 0, 0, 40, 16]);
+    expect(f.writes.some((w) => w[0] === 8)).toBe(false);
+    expect(() => validateFtpAssessment(control.report)).not.toThrow();
+  });
+  it('computes a result when the rider declares their limit', async () => {
+    const { control, ride } = setup();
+    await control.start();
+    await ride(300 + 6 * 60);
+    await control.finish('effort');
+    expect(control.report.status).toBe('estimated');
+    expect(() => validateFtpAssessment(control.report)).not.toThrow();
+  });
+  it('never sets FTP after a cancel, a short ramp, lost control or the protocol ceiling', async () => {
+    const cancel = setup();
+    await cancel.control.start();
+    await cancel.ride(400);
+    await cancel.control.finish('cancel');
+    expect(cancel.control.report.status).toBe('cancelled');
+    expect(cancel.control.report.ftp).toBeUndefined();
+
+    const short = setup();
+    await short.control.start();
+    await short.ride(300 + 60);
+    await short.control.finish('effort');
+    expect(short.control.report.status).toBe('invalid');
+    expect(short.control.report.ftp).toBeUndefined();
+
+    const lost = setup();
+    await lost.control.start();
+    await lost.ride(400);
+    lost.f.status(0xff);
+    await lost.ride(1);
+    expect(lost.control.phase).toBe('finished');
+    expect(lost.control.report.status).toBe('invalid');
+    expect(lost.control.report.ftp).toBeUndefined();
+
+    const top = setup();
+    await top.control.start();
+    await top.ride(1870);
+    expect(top.control.report.status).toBe('invalid');
+    expect(top.control.report.ftp).toBeUndefined();
   });
 });

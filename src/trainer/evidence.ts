@@ -1,7 +1,8 @@
-import type { PilotSnapshot } from './pilot';
+import type { SessionSnapshot, SessionState } from './session';
 import type { Telemetry } from './ftms';
+import type { AuditEntry } from './control';
 
-export function lastPowerAcknowledgement(snapshot: PilotSnapshot) {
+export function lastPowerAcknowledgement(snapshot: { audit: AuditEntry[] }) {
   const entry = snapshot.audit
     .filter(
       (e) =>
@@ -15,9 +16,26 @@ export function lastPowerAcknowledgement(snapshot: PilotSnapshot) {
     ? { watts: new DataView(Uint8Array.from(entry.bytes!).buffer).getInt16(1, true), at: entry.at }
     : null;
 }
+export function lastGradeAcknowledgement(snapshot: { audit: AuditEntry[] }) {
+  const entry = snapshot.audit
+    .filter(
+      (e) =>
+        e.event === 'acknowledgement' &&
+        e.bytes?.[0] === 0x11 &&
+        e.bytes.length === 7 &&
+        e.result === 1,
+    )
+    .at(-1);
+  return entry
+    ? {
+        grade: new DataView(Uint8Array.from(entry.bytes!).buffer).getInt16(3, true) / 100,
+        at: entry.at,
+      }
+    : null;
+}
 export type EvidenceSample = {
   at: number;
-  phase: PilotSnapshot['state'];
+  phase: SessionState;
   requested: number | null;
   acknowledged: number | null;
   acknowledgedAt: number | null;
@@ -37,13 +55,13 @@ const fresh = (value: number | undefined, at: number | undefined, now: number) =
   now - at <= 2500;
 
 /** Passive observation only: never sends commands or derives measured power from targets. */
-export class PilotEvidence {
+export class ControlEvidence {
   samples: EvidenceSample[] = [];
   timeOrigin = performance.timeOrigin;
   droppedSamples = 0;
   begin(now: number) {
     this.samples = this.samples
-      .filter((s) => s.at >= now - 10000 && ['idle', 'stopped', 'faulted'].includes(s.phase))
+      .filter((s) => s.at >= now - 10000 && ['waiting', 'ended', 'faulted'].includes(s.phase))
       .map((s) => ({
         ...s,
         requested: null,
@@ -52,17 +70,17 @@ export class PilotEvidence {
       }));
     this.droppedSamples = 0;
   }
-  record(now: number, t: Telemetry, snapshot: PilotSnapshot) {
+  record(now: number, t: Telemetry, snapshot: SessionSnapshot) {
     const ack = lastPowerAcknowledgement(snapshot);
     this.samples.push({
       at: now,
       phase: snapshot.state,
       requested:
-        snapshot.mode === 'sim' || ['idle', 'waiting'].includes(snapshot.state)
+        snapshot.mode === 'sim' || snapshot.state === 'waiting'
           ? null
-          : snapshot.requested,
+          : (snapshot.requestedWatts ?? null),
       ...(snapshot.mode === 'sim'
-        ? { grade: snapshot.grade, requestedGrade: snapshot.requestedGrade }
+        ? { grade: snapshot.appliedGrade, requestedGrade: snapshot.requestedGrade }
         : {}),
       acknowledged: ack?.watts ?? null,
       acknowledgedAt: ack?.at ?? null,
@@ -77,7 +95,7 @@ export class PilotEvidence {
       this.droppedSamples++;
     }
   }
-  report(snapshot: PilotSnapshot) {
+  report(snapshot: SessionSnapshot) {
     return {
       version: 2 as const,
       exportedAt: new Date().toISOString(),
@@ -90,12 +108,12 @@ export class PilotEvidence {
     };
   }
 }
-export type PilotReport = ReturnType<PilotEvidence['report']>;
+export type ControlReport = ReturnType<ControlEvidence['report']>;
 export function summarizePlateaus(samples: EvidenceSample[]) {
   const groups: EvidenceSample[][] = [];
   let current: EvidenceSample[] | undefined;
   for (const s of samples) {
-    if (s.phase !== 'running' || s.acknowledged === null || s.acknowledged !== s.requested) {
+    if (s.phase !== 'active' || s.acknowledged === null || s.acknowledged !== s.requested) {
       current = undefined;
       continue;
     }

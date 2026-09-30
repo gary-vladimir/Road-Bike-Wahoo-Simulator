@@ -19,7 +19,9 @@ export default function Settings({
     [bikeMass, setBikeMass] = useState((settings.bikeMass ?? 9).toString()),
     [wheel, setWheel] = useState({ ...(settings.wheel ?? stockWheel) }),
     [quality, setQuality] = useState(settings.quality),
-    [position, setPosition] = useState<RidingPosition>(settings.position ?? 'hoods');
+    [position, setPosition] = useState<RidingPosition>(settings.position ?? 'hoods'),
+    [trainerControl, setTrainerControl] = useState(settings.trainerControl === true),
+    [difficulty, setDifficulty] = useState(settings.difficulty ?? 100);
   const [message, setMessage] = useState('');
   const input = useRef<HTMLInputElement>(null);
   return (
@@ -39,6 +41,8 @@ export default function Settings({
                 bikeMass: Number(bikeMass),
                 wheel,
                 position,
+                trainerControl,
+                difficulty,
                 quality,
               };
               if (
@@ -252,11 +256,57 @@ export default function Settings({
           <p className="fine-print">Import merges records and replaces matching IDs.</p>
           <hr />
           <h3>Trainer control</h3>
-          <p>
-            In the trainer-control build, choose automatic SIM terrain for roads or automatic ERG
-            for structured workouts. Pairing alone does not start resistance control. FTP
-            assessments use their own absolute watt targets and never require a made-up FTP.
-          </p>
+          <label className="switch-row">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label="Let BikeSIM control my KICKR"
+              checked={trainerControl}
+              onChange={async (e) => {
+                const on = e.target.checked;
+                setTrainerControl(on);
+                try {
+                  await onSave({ ...settings, trainerControl: on });
+                  setMessage(on ? 'Trainer control is on.' : 'Trainer control is off.');
+                } catch {
+                  setTrainerControl(!on);
+                  setMessage('Could not save the trainer control setting.');
+                }
+              }}
+            />
+            <span>
+              <strong>Let BikeSIM control my KICKR</strong>
+              <small>
+                Road rides follow the terrain (SIM) and workouts hold your target watts (ERG). Load
+                only changes during rides you start. Pausing always eases to a light load.
+              </small>
+            </span>
+          </label>
+          <ul className="tips">
+            <li>
+              In the Wahoo app, set rider weight to {settings.mass} kg and the wheel to{' '}
+              {wheelLabel(settings.wheel ?? stockWheel)}; the trainer uses them for SIM.
+            </li>
+            <li>Close Zwift, the Wahoo app or anything else that controls the trainer.</li>
+            <li>Space or Esc pauses a ride and eases the trainer to a light load.</li>
+          </ul>
+          <label>
+            Trainer difficulty · {difficulty}%
+            <input
+              type="range"
+              aria-label="Trainer difficulty percent"
+              min={0}
+              max={100}
+              step={5}
+              value={difficulty}
+              onChange={(e) => setDifficulty(Number(e.target.value))}
+            />
+            <small>
+              How much of each road's slope you feel on the trainer. 100% is the real road; 50%
+              makes a 10% climb feel like 5%. The screen and virtual speed always use the real
+              grade. Save settings to apply.
+            </small>
+          </label>
         </section>
       </div>
       {message && (

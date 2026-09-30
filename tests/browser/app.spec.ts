@@ -64,12 +64,7 @@ test('settings, backup download and no automatic Bluetooth pairing', async ({ pa
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByLabel('FTP watts')).toHaveValue('215');
   await page.getByRole('button', { name: 'Trainer', exact: true }).click();
-  await expect(
-    page.getByText(
-      process.env.VITE_TRAINER_CONTROL === 'pilot' ? 'Explicit test start required' : 'Disabled',
-      { exact: true },
-    ),
-  ).toBeVisible();
+  await expect(page.getByText('Off · turn on in Settings', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pair KICKR via Bluetooth' })).toBeVisible();
 });
 test('narrow screen retains workout controls', async ({ page }) => {

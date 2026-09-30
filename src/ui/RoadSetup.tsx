@@ -5,7 +5,7 @@ import type { Source } from '../ride/engine';
 import type { Settings } from '../storage/store';
 import TerrainProfile from './TerrainProfile';
 import { stockWheel, wheelLabel } from '../ride/bike';
-import { supportsRoadControl } from '../ride/ride-control';
+import { gradeEnvelopes } from '../trainer/session';
 export default function RoadSetup({
   settings,
   loaded,
@@ -17,9 +17,12 @@ export default function RoadSetup({
 }) {
   const [route, setRoute] = useState(routes[0]),
     [source, setSource] = useState<Source | 'controlled'>('demo');
-  const [ready, setReady] = useState(false);
   const controlled = source === 'controlled';
-  const supported = supportsRoadControl(route);
+  const canControl = settings.trainerControl === true;
+  const difficulty = settings.difficulty ?? 100;
+  const steepest = Math.max(...route.points.map((p) => p.grade)),
+    lowest = Math.min(...route.points.map((p) => p.grade));
+  const trainerMax = Math.min(gradeEnvelopes.road.maxGrade, (steepest * difficulty) / 100);
   const length = routeLength(route),
     finish = routePosition(route, length);
   return (
@@ -73,10 +76,7 @@ export default function RoadSetup({
               key={r.id}
               className={`workout-card ${r.id === route.id ? 'chosen' : ''}`}
               aria-pressed={r.id === route.id}
-              onClick={() => {
-                setRoute(r);
-                setReady(false);
-              }}
+              onClick={() => setRoute(r)}
             >
               <div className="route-cover">
                 <img src={`/scenes/${r.id}.jpg`} alt="" loading="lazy" />
@@ -123,49 +123,28 @@ export default function RoadSetup({
             Ride source
             <select
               value={source}
-              onChange={(e) => {
-                setSource(e.target.value as Source | 'controlled');
-                setReady(false);
-              }}
+              onChange={(e) => setSource(e.target.value as Source | 'controlled')}
             >
               <option value="demo">Demo · adjustable effort</option>
               <option value="bluetooth">KICKR · live power, read-only</option>
-              {import.meta.env.VITE_TRAINER_CONTROL === 'pilot' && (
-                <option value="controlled">KICKR · automatic SIM terrain</option>
-              )}
+              {canControl && <option value="controlled">KICKR · automatic SIM terrain</option>}
             </select>
           </label>
           <p className="start-note">
             {controlled
-              ? 'BikeSIM controls slope while you shift naturally. Startup applies flat SIM before the countdown. Stop ends control; it may restore a heavier previous load.'
+              ? `The trainer follows the road while you shift naturally: ${lowest}% to +${steepest}% on this road${difficulty < 100 ? `, felt at ${difficulty}% difficulty` : ''}. It starts on a flat road and eases to flat whenever you pause.`
               : source === 'demo'
                 ? 'Explore terrain physics with a simulated rider. Adjust watts or coast during the ride.'
                 : 'Your power moves the scene. FTP is not required. Existing trainer resistance remains unchanged.'}
           </p>
-          {controlled && (
-            <>
-              {!supported && (
-                <p role="alert">
-                  This route exceeds the supported −4% to +5% control range. Choose another road or
-                  use a preview source.
-                </p>
-              )}
-              <label className="source-label">
-                <input
-                  type="checkbox"
-                  checked={ready}
-                  onChange={(e) => setReady(e.target.checked)}
-                />
-                I’m ready for a SIM road ride: the current load is comfortable, other trainer apps
-                are closed, and Wahoo’s rider weight and wheel size match my BikeSIM settings. This
-                road ranges from {Math.min(...route.points.map((p) => p.grade))}% to +
-                {Math.max(...route.points.map((p) => p.grade))}%.
-              </label>
-            </>
+          {controlled && steepest * (difficulty / 100) > gradeEnvelopes.road.maxGrade && (
+            <p className="fine-print">
+              The trainer caps slope at +{trainerMax}%; the screen still shows the real grade.
+            </p>
           )}
           <button
             className="primary"
-            disabled={!loaded || (controlled && (!ready || !supported))}
+            disabled={!loaded}
             onClick={() => onStart(route, controlled ? 'bluetooth' : source, controlled)}
           >
             <Play size={17} />
@@ -177,8 +156,8 @@ export default function RoadSetup({
           </button>
           <p className="fine-print">
             {controlled
-              ? 'Terrain changes gradually. Valley warm-up and pause/resume are rider-verified; steeper roads are newly enabled. Fresh zero-watt telemetry permits coasting.'
-              : 'Demo and live previews send no trainer commands.'}
+              ? 'Slope changes are smoothed. Coasting at 0 W is fine.'
+              : 'Demo and live previews never change trainer load.'}
           </p>
           <p className="fine-print">
             Speed estimate: {settings.mass} kg rider + {settings.bikeMass ?? 9} kg bike. Edit weight

@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { Bluetooth, Cable, Download, ShieldCheck, Unplug } from 'lucide-react';
 import { trainer } from '../trainer/bluetooth';
 import { download } from '../storage/store';
-import PowerPilot from './PowerPilot';
+import ControlCheck from './ControlCheck';
 import type { Settings } from '../storage/store';
 export default function Diagnostics({ settings }: { settings: Settings }) {
-  const pilotAvailable = import.meta.env.VITE_TRAINER_CONTROL === 'pilot';
+  const pilotAvailable = settings.trainerControl === true;
   const stopTest = useRef<(() => Promise<void>) | null>(null);
   const registerStop = useCallback((stop: (() => Promise<void>) | null) => {
     stopTest.current = stop;
@@ -27,7 +27,7 @@ export default function Diagnostics({ settings }: { settings: Settings }) {
           <p>Read live metrics from your KICKR CORE 2.</p>
         </div>
         <span className="pill">
-          <ShieldCheck size={15} /> {pilotAvailable ? 'Manual control test available' : 'Read-only'}
+          <ShieldCheck size={15} /> {pilotAvailable ? 'Trainer control on' : 'Read-only'}
         </span>
       </div>
       <div className="two-columns">
@@ -35,9 +35,7 @@ export default function Diagnostics({ settings }: { settings: Settings }) {
           <Bluetooth size={32} className="lime" />
           <h2>{device.name}</h2>
           <p role="status">
-            {pilotActive
-              ? 'Supervised test active. See test status and Stop controls below.'
-              : device.message}
+            {pilotActive ? 'Manual trainer check running. See its controls below.' : device.message}
           </p>
           <div className="connection-facts">
             <span>
@@ -52,7 +50,9 @@ export default function Diagnostics({ settings }: { settings: Settings }) {
             </span>
             <span>
               Trainer control
-              <strong>{pilotAvailable ? 'Explicit test start required' : 'Disabled'}</strong>
+              <strong>
+                {pilotAvailable ? 'On · rides you start' : 'Off · turn on in Settings'}
+              </strong>
             </span>
             <span>
               Transport<strong>Bluetooth · FTMS</strong>
@@ -146,13 +146,11 @@ export default function Diagnostics({ settings }: { settings: Settings }) {
           </div>
         </section>
       </div>
-      {pilotAvailable && (
-        <PowerPilot
-          settings={settings}
-          registerStop={registerStop}
-          onActiveChange={setPilotActive}
-        />
-      )}
+      <ControlCheck
+        canControl={pilotAvailable}
+        registerStop={registerStop}
+        onActiveChange={setPilotActive}
+      />
       <section className="panel diagnostics-log">
         <div className="section-title">
           <h2>Connection log</h2>
@@ -166,9 +164,7 @@ export default function Diagnostics({ settings }: { settings: Settings }) {
                     ...device,
                     telemetry: device.telemetry,
                     telemetryAdapterWrites: 0,
-                    controlAudit: pilotAvailable
-                      ? 'Export separately from the supervised test panel'
-                      : 'Control disabled',
+                    controlAudit: 'Export separately from the manual trainer check',
                   },
                   null,
                   2,

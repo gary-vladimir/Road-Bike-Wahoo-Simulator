@@ -37,8 +37,9 @@ export function encodeControl(command: ControlCommand, limits: ControlLimits): U
         rollingResistance,
         windResistance,
       ].every(Number.isFinite) ||
-      allowed.minGrade < -6 ||
-      allowed.maxGrade > 6 ||
+      // App-wide cap inside the KICKR CORE 2 simulation range (up to 16%).
+      allowed.minGrade < -10 ||
+      allowed.maxGrade > 15 ||
       allowed.minGrade > allowed.maxGrade ||
       grade < allowed.minGrade ||
       grade > allowed.maxGrade ||

@@ -3,7 +3,6 @@ import type { Telemetry } from '../trainer/ftms';
 import { routeLength, routePosition, validateRoute, type Route } from './terrain';
 import { advance, createSetup, type PhysicsSetup, type RidingPosition } from './physics';
 import { stockWheel, validateWheel, type WheelSetup } from './bike';
-import { supportsRoadControl } from './ride-control';
 import { workoutControlIssue, workoutTarget } from './workout-control';
 export type Source = 'demo' | 'bluetooth';
 export type Phase = 'countdown' | 'running' | 'paused' | 'finished';
@@ -99,11 +98,8 @@ export class RideEngine {
     )
       throw new Error('Enter FTP between 50–600 W and rider mass between 35–200 kg.');
     if (options?.route) validateRoute(options.route);
-    if (
-      options?.trainerControl === 'sim' &&
-      (source !== 'bluetooth' || !options.route || !supportsRoadControl(options.route))
-    )
-      throw new Error('This road is outside the supported trainer-control range (−4% to +5%).');
+    if (options?.trainerControl === 'sim' && (source !== 'bluetooth' || !options.route))
+      throw new Error('Automatic SIM terrain requires a live road ride.');
     if (options?.trainerControl === 'erg') {
       const issue = workoutControlIssue(workout, ftp);
       if (source !== 'bluetooth' || options.route || issue)

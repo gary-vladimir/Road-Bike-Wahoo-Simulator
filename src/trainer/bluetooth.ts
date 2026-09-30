@@ -28,7 +28,10 @@ const initial = (): DeviceSnapshot => ({
   services: [],
   log: [],
 });
-/** Deliberately has no write method. Read-only means no load/control commands. */
+/**
+ * Pairing and telemetry. Deliberately has no write method: load changes happen only inside an
+ * explicitly started TrainerSession, and only while control is enabled in Settings.
+ */
 export class BluetoothTrainer {
   snapshot = initial();
   private listeners = new Set<() => void>();
@@ -44,9 +47,8 @@ export class BluetoothTrainer {
     };
   };
   getSnapshot = () => this.snapshot;
-  getPilotDevice(mode: 'erg' | 'sim' = 'erg') {
-    if (import.meta.env.VITE_TRAINER_CONTROL !== 'pilot')
-      throw new Error('Control is disabled in this build.');
+  /** The connected trainer for a control session; throws if it cannot do `mode`. */
+  controlSource(mode: 'erg' | 'sim' = 'erg') {
     if (
       !this.device ||
       this.snapshot.status !== 'connected' ||

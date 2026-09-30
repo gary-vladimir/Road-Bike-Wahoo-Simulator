@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlQueue, encodeControl, type ControlWire } from '../../src/trainer/control';
-import { PowerSupervisor } from '../../src/safety/supervisor';
-import type { Telemetry } from '../../src/trainer/ftms';
 const limits = { min: 0, max: 2000, increment: 1, ceiling: 150 };
 class Wire implements ControlWire {
   writes: number[][] = [];
@@ -122,75 +120,25 @@ describe('bounded FTMS control preparation — mock transport only', () => {
     expect(wire.writes).toEqual([[0]]);
     q.close();
   });
-  it('arms at 50 W, ramps by at most 10 W per second, and stops on stale data', async () => {
-    const wire = new Wire();
-    wire.auto = true;
-    const q = new ControlQueue(wire, limits);
-    let now = 1000;
-    let t: Telemetry = { power: 50, cadence: 80, receivedAt: now, powerAt: now, cadenceAt: now };
-    const supervisor = new PowerSupervisor(
-      q,
-      limits,
-      () => t,
-      () => now,
-    );
-    await supervisor.arm();
-    expect(supervisor.state).toBe('running');
-    expect(wire.writes).toEqual([[0], [5, 50, 0], [7]]);
-    now += 1000;
-    t = { ...t, powerAt: now, cadenceAt: now };
-    await supervisor.update(150);
-    expect(supervisor.applied).toBe(60);
-    now += 500;
-    t = { ...t, powerAt: now, cadenceAt: now };
-    await supervisor.update(150);
-    expect(supervisor.applied).toBe(60);
-    now += 3000;
-    await supervisor.update(150);
-    expect(supervisor.state).toBe('faulted');
-    expect(wire.writes.at(-1)).toEqual([8, 1]);
-    q.close();
-  });
-  it('blocks arming without cadence and faults on a stalled rider', async () => {
-    const wire = new Wire();
-    wire.auto = true;
-    const q = new ControlQueue(wire, limits);
-    let t: Telemetry = { power: 60, receivedAt: 1000, powerAt: 1000 };
-    const supervisor = new PowerSupervisor(
-      q,
-      limits,
-      () => t,
-      () => 1000,
-    );
-    await expect(supervisor.arm()).rejects.toThrow('Fresh power and cadence');
-    expect(wire.writes).toEqual([]);
-    t = { ...t, cadence: 80, cadenceAt: 1000 };
-    await supervisor.arm();
-    t.cadence = 20;
-    await supervisor.update(100);
-    expect(supervisor.state).toBe('faulted');
-    expect(wire.writes.at(-1)).toEqual([8, 1]);
-    q.close();
-  });
-  it('cancels arming safely when stop is requested before control is acknowledged', async () => {
-    const wire = new Wire(),
-      q = new ControlQueue(wire, limits);
-    const supervisor = new PowerSupervisor(
-      q,
-      limits,
-      () => ({ power: 60, cadence: 80, powerAt: 1000, cadenceAt: 1000, receivedAt: 1000 }),
-      () => 1000,
-    );
-    const arm = supervisor.arm();
-    await flush();
-    const stop = supervisor.stop();
-    wire.ack(0);
-    await flush();
-    wire.ack(8);
-    await arm;
-    await stop;
-    expect(supervisor.state).toBe('stopped');
-    expect(wire.writes).toEqual([[0], [8, 1]]);
-    q.close();
+  it('encodes signed little-endian SIM slope and coefficients within an explicit grant', () => {
+    const grant = { ...limits, simulation: { minGrade: -10, maxGrade: 12 } };
+    const sim = (grade: number, windSpeed = 0) =>
+      ({
+        kind: 'simulation',
+        grade,
+        windSpeed,
+        rollingResistance: 0.004,
+        windResistance: 0.16,
+      }) as const;
+    expect([...encodeControl(sim(-1.5), grant)]).toEqual([0x11, 0, 0, 0x6a, 0xff, 40, 16]);
+    expect([...encodeControl(sim(2, -1.25), grant)]).toEqual([0x11, 0x1e, 0xfb, 200, 0, 40, 16]);
+    expect([...encodeControl(sim(12), grant)]).toEqual([0x11, 0, 0, 0xb0, 0x04, 40, 16]);
+    expect(() => encodeControl(sim(1), limits)).toThrow('not authorized');
+    for (const grade of [NaN, Infinity, -10.5, 12.5])
+      expect(() => encodeControl(sim(grade), grant)).toThrow();
+    // No grant may exceed the app-wide cap, whatever a caller asks for.
+    expect(() =>
+      encodeControl(sim(0), { ...limits, simulation: { minGrade: -20, maxGrade: 20 } }),
+    ).toThrow();
   });
 });

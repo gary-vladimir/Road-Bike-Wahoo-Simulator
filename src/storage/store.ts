@@ -2,7 +2,7 @@ import { openDB } from 'idb';
 import type { Session } from '../ride/engine';
 import { validateWorkout, type Workout } from '../workouts/model';
 import { validateRoute } from '../ride/terrain';
-import type { PilotReport } from '../trainer/pilot-evidence';
+import type { ControlReport } from '../trainer/evidence';
 import { stockWheel, validateWheel, type WheelSetup } from '../ride/bike';
 import { validateFtpAssessment, type FtpAssessment } from '../ride/ftp-test';
 import { ridingPositions, type RidingPosition } from '../ride/physics';
@@ -13,6 +13,10 @@ export type Settings = {
   wheel?: WheelSetup;
   /** Aerodynamic riding position for virtual speed and SIM drag. */
   position?: RidingPosition;
+  /** Rider opt-in: BikeSIM may set trainer load during rides it starts. */
+  trainerControl?: boolean;
+  /** Percent of the road slope sent to the trainer in SIM (Zwift-style trainer difficulty). */
+  difficulty?: number;
   quality: 'high' | 'low';
 };
 export const defaults: Settings = {
@@ -21,6 +25,8 @@ export const defaults: Settings = {
   bikeMass: 9,
   wheel: stockWheel,
   position: 'hoods',
+  trainerControl: false,
+  difficulty: 100,
   quality: 'high',
 };
 // One shared connection per IndexedDB factory (tests swap the factory between cases).
@@ -85,10 +91,11 @@ export async function saveFtpAssessment(report: FtpAssessment, apply = false) {
   await tx.done;
 }
 /** Separate from rider settings/backups; restored for export only, never control resumption. */
-export async function savePilotReport(report: PilotReport) {
+// Stored under its original key so the last manual check survives this rename.
+export async function saveControlReport(report: ControlReport) {
   await (await db()).put('settings', report, 'last-pilot-report');
 }
-export async function loadPilotReport(): Promise<PilotReport | undefined> {
+export async function loadControlReport(): Promise<ControlReport | undefined> {
   return (await db()).get('settings', 'last-pilot-report');
 }
 export async function loadWorkouts(): Promise<Workout[]> {
@@ -212,6 +219,11 @@ export async function restoreBackup(raw: unknown) {
     (b.settings.ftp !== null &&
       (!Number.isFinite(b.settings.ftp) || b.settings.ftp < 50 || b.settings.ftp > 600)) ||
     (b.settings.position !== undefined && !Object.hasOwn(ridingPositions, b.settings.position)) ||
+    (b.settings.trainerControl !== undefined && typeof b.settings.trainerControl !== 'boolean') ||
+    (b.settings.difficulty !== undefined &&
+      (!Number.isFinite(b.settings.difficulty) ||
+        b.settings.difficulty < 0 ||
+        b.settings.difficulty > 100)) ||
     !Number.isFinite(b.settings.mass) ||
     b.settings.mass < 35 ||
     b.settings.mass > 200 ||
@@ -229,7 +241,11 @@ export async function restoreBackup(raw: unknown) {
     await tx
       .objectStore('sessions')
       .put({ ...s, status: s.status === 'in-progress' ? 'interrupted' : s.status });
-  await tx.objectStore('settings').put(b.settings, 'rider');
+  // A backup never switches trainer control on by itself: keep this browser's choice.
+  const current: Partial<Settings> = (await tx.objectStore('settings').get('rider')) ?? {};
+  await tx
+    .objectStore('settings')
+    .put({ ...b.settings, trainerControl: current.trainerControl ?? false }, 'rider');
   if (b.ftpAssessments) {
     const existing: FtpAssessment[] =
       (await tx.objectStore('settings').get('ftp-assessments')) ?? [];

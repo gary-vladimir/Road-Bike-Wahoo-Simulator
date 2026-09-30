@@ -74,13 +74,8 @@ export function estimateFtp(readings: FtpReading[]) {
       const r = ramp[j];
       if (Math.abs(r.end - cursor) > 0.001) break;
       const seconds = Math.min(end, r.end) - Math.max(start, r.start);
-      if (
-        seconds <= 0 ||
-        ![r.power, r.cadence, r.acknowledged].every(Number.isFinite) ||
-        r.power < 0 ||
-        r.cadence < 50
-      )
-        break;
+      // Power is the measurement; the KICKR sometimes reports a spurious 0 rpm while pedaling.
+      if (seconds <= 0 || ![r.power, r.acknowledged].every(Number.isFinite) || r.power < 0) break;
       covered += seconds;
       watts += seconds * r.power;
       target += seconds * r.acknowledged;
@@ -91,8 +86,7 @@ export function estimateFtp(readings: FtpReading[]) {
       expected = target / covered;
     }
   }
-  if (!best)
-    return { reason: 'No continuous minute of valid ramp power and cadence was recorded.' };
+  if (!best) return { reason: 'No continuous minute of valid ramp power was recorded.' };
   if (Math.abs(best - expected) > Math.max(10, expected * 0.15))
     return {
       reason:

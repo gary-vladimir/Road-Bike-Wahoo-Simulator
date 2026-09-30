@@ -21,18 +21,19 @@ import { routeLength, routePosition } from '../ride/terrain';
 import { coastStatus } from '../ride/physics';
 import TerrainProfile from './TerrainProfile';
 import { stockWheel, virtualWheelRpm } from '../ride/bike';
-import { RideControl } from '../ride/ride-control';
-import { workoutPowerCeiling } from '../ride/workout-control';
-import { ErgPilot } from '../trainer/pilot';
-import { lastPowerAcknowledgement } from '../trainer/pilot-evidence';
+import { RideTrainer } from '../ride/ride-trainer';
+import { TrainerSession, roadCoefficients } from '../trainer/session';
 
 export default function Ride({
   engine,
   quality,
+  difficulty = 100,
   onFinish,
 }: {
   engine: RideEngine;
   quality: string;
+  /** Percent of road slope the trainer applies (SIM). */
+  difficulty?: number;
   onFinish: (session: Session) => void;
 }) {
   const [state, setState] = useState({ ...engine.state });
@@ -49,30 +50,26 @@ export default function Ride({
     speed: engine.state.speed,
     at: performance.now(),
   });
-  const control = useRef<RideControl | null>(null);
   const controlled = !!engine.session.trainerControl;
   const erg = engine.session.trainerControl === 'erg';
   const refresh = () => setState({ ...engine.state });
-  const arm = () => {
-    const controller = new RideControl(
-      engine,
-      (changed) =>
-        erg
-          ? ErgPilot.prepare(
-              trainer.getPilotDevice('erg'),
+  const [link] = useState(() =>
+    controlled
+      ? new RideTrainer(
+          engine,
+          (changed) =>
+            TrainerSession.open(
+              trainer.controlSource(erg ? 'erg' : 'sim'),
+              erg
+                ? { mode: 'erg', powerCeiling: RideTrainer.ceiling(engine) }
+                : { mode: 'sim', road: roadCoefficients(engine.setup) },
               changed,
-              'erg',
-              'workout',
-              workoutPowerCeiling(engine.session.workout, engine.session.ftp!),
-            )
-          : ErgPilot.prepare(trainer.getPilotDevice('sim'), changed, 'sim', 'road'),
-      refresh,
-    );
-    control.current = controller;
-    void controller.start();
-    refresh();
-  };
-  const stopControl = () => control.current?.stop() ?? Promise.resolve();
+            ),
+          () => setState({ ...engine.state }),
+          difficulty / 100,
+        )
+      : null,
+  );
   const persist = () => {
     const snapshot = structuredClone(engine.session);
     queue.current = queue.current
@@ -88,20 +85,27 @@ export default function Ride({
       });
     return queue.current;
   };
+  const pause = (reason?: string) => {
+    engine.pause(reason);
+    // The trainer eases to a light load right away rather than waiting for the next tick.
+    link?.update();
+    refresh();
+    void persist();
+  };
   useEffect(() => {
     if (!sceneReady) return;
-    if (controlled && engine.state.phase === 'countdown') arm();
+    if (link && engine.state.phase === 'countdown') void link.start();
     void persist();
     let lastSave = performance.now();
     const timer = setInterval(() => {
       const now = performance.now();
-      if (!controlled || control.current?.ready) engine.tick(now, trainer.snapshot.telemetry);
+      if (!link || link.ready) engine.tick(now, trainer.snapshot.telemetry);
       motion.current = {
         distance: engine.state.distance * 1000,
         speed: engine.state.speed,
         at: now,
       };
-      control.current?.update();
+      link?.update();
       setState({ ...engine.state });
       if (performance.now() - lastSave > 5000) {
         lastSave = performance.now();
@@ -109,30 +113,23 @@ export default function Ride({
       }
       if (engine.state.phase === 'finished') {
         clearInterval(timer);
-        void stopControl()
+        void (link?.finish() ?? Promise.resolve())
           .then(persist)
           .then(() => onFinish(structuredClone(engine.session)));
       }
     }, 100);
     const hidden = () => {
-      if (document.hidden) {
-        engine.pause('The ride paused while this tab was hidden.');
-        void stopControl().then(persist);
-        setState({ ...engine.state });
-      }
+      if (document.hidden) pause('Paused while BikeSIM was hidden.');
     };
     const keys = (e: KeyboardEvent) => {
       if (e.code === 'Escape' || e.code === 'Space') {
         e.preventDefault();
-        engine.pause('Stopped by keyboard. Resume deliberately when ready.');
-        void stopControl().then(persist);
-        setState({ ...engine.state });
+        pause('Paused from the keyboard. Resume when you are ready.');
       }
     };
     const leaving = (e: BeforeUnloadEvent) => {
       if (engine.state.phase !== 'finished') {
-        engine.pause('Page closed or refreshed');
-        void stopControl().then(persist);
+        pause('Page closed or refreshed.');
         e.preventDefault();
         e.returnValue = '';
       }
@@ -142,7 +139,7 @@ export default function Ride({
     window.addEventListener('beforeunload', leaving);
     return () => {
       clearInterval(timer);
-      void stopControl();
+      void link?.finish();
       document.removeEventListener('visibilitychange', hidden);
       window.removeEventListener('keydown', keys);
       window.removeEventListener('beforeunload', leaving);
@@ -152,24 +149,16 @@ export default function Ride({
     next = engine.session.workout.blocks[current.index + 1];
   const route = engine.session.route;
   const terrain = route ? routePosition(route, state.distance * 1000) : null;
-  const acknowledgedPower = control.current?.snapshot
-    ? lastPowerAcknowledgement(control.current.snapshot)?.watts
-    : undefined;
+  const trainerState = link?.snapshot;
   const coast = coastStatus(state.speed, state.grade, engine.setup);
-  const pause = () => {
-    engine.pause();
-    setState({ ...engine.state });
-    void stopControl().then(persist);
-  };
   const resume = () => {
-    if (controlled && control.current && !control.current.ended) return;
     engine.resume();
-    if (controlled && sceneReady) arm();
-    setState({ ...engine.state });
+    link?.resume();
+    refresh();
   };
   const finish = () => {
     engine.finish();
-    setState({ ...engine.state });
+    refresh();
   };
   return (
     <div
@@ -190,7 +179,7 @@ export default function Ride({
         />
       </div>
       <div className="ride-top">
-        <button className="glass-button" onClick={pause}>
+        <button className="glass-button" onClick={() => pause()}>
           <ArrowLeft size={18} /> Menu
         </button>
         <div className="ride-title">
@@ -287,23 +276,15 @@ export default function Ride({
           <div aria-label="Trainer control status">
             {erg ? (
               <>
-                <b>{acknowledgedPower ?? '—'} W</b> last acknowledged trainer target
+                <b>{trainerState?.appliedWatts ?? '—'} W</b> trainer target
               </>
             ) : (
               <>
-                <b>{control.current?.snapshot?.grade?.toFixed(2) ?? '—'}%</b> last acknowledged
-                trainer slope
+                <b>{trainerState?.appliedGrade?.toFixed(1) ?? '—'}%</b> trainer slope
+                {difficulty < 100 ? ` · ${difficulty}% difficulty` : ''}
               </>
             )}
-            <p>
-              {control.current?.ending
-                ? 'Stopping trainer…'
-                : control.current?.ready
-                  ? erg
-                    ? 'ERG control active · changes up to 10 W/s'
-                    : 'Terrain control active'
-                  : (control.current?.message ?? 'Waiting for road preparation')}
-            </p>
+            <p>{link?.message}</p>
           </div>
         )}
         {route && (
@@ -453,16 +434,12 @@ export default function Ride({
           <span className="saved-indicator">
             {savedAt && !storageError ? 'Saved on this computer' : 'Saving…'}
           </span>
-          <button className="secondary" onClick={pause}>
+          <button className="secondary" onClick={() => pause()}>
             <Pause size={16} /> Pause
           </button>
           <button
             className="stop-button"
-            onClick={() => {
-              engine.pause('Stop requested. The simulator is paused.');
-              setState({ ...engine.state });
-              void stopControl().then(persist);
-            }}
+            onClick={() => pause('Ride paused. Finish to save it, or resume when you are ready.')}
           >
             <Square size={14} fill="currentColor" /> Stop
           </button>
@@ -478,22 +455,20 @@ export default function Ride({
               : 'PREPARING THE ROAD'}
           </span>
           <strong className="countdown-number">
-            {sceneReady && (!controlled || control.current?.ready)
-              ? Math.ceil(state.countdown)
-              : '…'}
+            {sceneReady && (!link || link.ready) ? Math.ceil(state.countdown) : '…'}
           </strong>
           <p>
-            {controlled
-              ? control.current?.ready
+            {link
+              ? link.ready
                 ? erg
-                  ? '50 W ERG is active. Keep pedaling above 50 rpm; workout targets follow after the countdown.'
-                  : 'Flat SIM is active. Shift to a comfortable gear; terrain follows after the countdown.'
-                : (control.current?.message ?? 'Preparing trainer. The ride clock is waiting.')
+                  ? 'ERG is holding 50 W. Keep pedaling; workout targets follow after the countdown.'
+                  : 'The trainer is on a flat road. Pick a comfortable gear; terrain follows the countdown.'
+                : link.message
               : engine.session.source === 'demo'
                 ? 'Demo rider starting. No trainer commands.'
                 : 'Start pedaling. Trainer resistance is unchanged.'}
           </p>
-          <button className="secondary" onClick={pause}>
+          <button className="secondary" onClick={() => pause()}>
             Cancel countdown
           </button>
         </div>
@@ -507,15 +482,13 @@ export default function Ride({
             {engine.session.source === 'bluetooth' && (
               <p>
                 {controlled
-                  ? `${control.current?.ending ? 'Stopping trainer…' : (control.current?.message ?? '')} Stop may restore a heavier load. Resume deliberately when comfortable; it will start with ${erg ? '50 W ERG once cadence reaches 50 rpm' : 'flat SIM'}.`
+                  ? link?.ended
+                    ? `${link.message} Resume takes control again${erg ? ' once you pedal above 50 rpm' : ''}.`
+                    : `${erg ? 'The trainer is holding a light 50 W.' : 'The trainer is holding a flat road.'} Resume when you are ready.`
                   : 'BikeSIM is reading only. It has not changed trainer resistance.'}
               </p>
             )}
-            <button
-              className="primary"
-              onClick={resume}
-              disabled={controlled && !!control.current && !control.current.ended}
-            >
+            <button className="primary" onClick={resume}>
               <Play size={18} /> Resume ride <ChevronRight size={18} />
             </button>
             <button className="secondary full" onClick={finish}>

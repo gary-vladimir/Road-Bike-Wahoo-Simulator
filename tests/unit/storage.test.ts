@@ -10,15 +10,15 @@ import {
   saveSession,
   saveSettings,
   saveWorkout,
-  savePilotReport,
-  loadPilotReport,
+  saveControlReport,
+  loadControlReport,
   loadFtpAssessments,
   saveFtpAssessment,
 } from '../../src/storage/store';
 import { RideEngine } from '../../src/ride/engine';
 import { presets } from '../../src/workouts/model';
 import { routes, routeWorkout } from '../../src/ride/terrain';
-import { PilotEvidence } from '../../src/trainer/pilot-evidence';
+import { ControlEvidence } from '../../src/trainer/evidence';
 import { estimateFtp, ftpTarget, type FtpAssessment } from '../../src/ride/ftp-test';
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
@@ -80,17 +80,21 @@ describe('local persistence and backup boundaries', () => {
     await expect(restoreBackup(b)).rejects.toThrow('control mode');
   });
   it('saves diagnostic evidence separately without changing rider settings or restoring control', async () => {
-    const report = new PilotEvidence().report({
-      state: 'running',
-      applied: 75,
-      requested: 100,
+    const report = new ControlEvidence().report({
+      state: 'active',
+      mode: 'erg',
+      recovery: false,
+      appliedWatts: 75,
+      requestedWatts: 100,
+      stopConfirmed: false,
+      releaseConfirmed: false,
       message: '',
       audit: [],
       machineStatus: [],
     });
     await saveSettings({ ftp: 210, mass: 70, quality: 'low' });
-    await savePilotReport(report);
-    expect(await loadPilotReport()).toEqual(report);
+    await saveControlReport(report);
+    expect(await loadControlReport()).toEqual(report);
     expect((await loadSettings()).ftp).toBe(210);
     expect((await backup()).settings).not.toHaveProperty('audit');
   });
