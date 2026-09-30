@@ -5,9 +5,11 @@ import { clock } from '../workouts/model';
 export function activityPresentation(s: Session) {
   const title = `${s.source === 'demo' ? 'DEMO - ' : ''}BikeSIM - ${s.workout.name}`;
   const mode = s.route
-    ? s.trainerControl === 'sim'
-      ? 'SIM terrain with automatic trainer resistance'
-      : 'SIM terrain with free pacing'
+    ? `${s.route.path ? `Virtual ride on the real ${s.route.name} road (OpenStreetMap, SRTM elevation), ` : ''}${
+        s.trainerControl === 'sim'
+          ? 'SIM terrain with automatic trainer resistance'
+          : 'SIM terrain with free pacing'
+      }`
     : `${s.workout.category} workout${s.trainerControl === 'erg' ? ' with automatic ERG power targets' : ' with target guidance'}`;
   const status =
     s.status === 'completed'

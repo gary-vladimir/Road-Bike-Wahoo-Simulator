@@ -26,7 +26,9 @@ export default function ActivityExport({ session }: { session: Session }) {
     <section className="card" aria-label="Strava file export">
       <h2>Share on Strava</h2>
       <p className="muted">
-        The FIT file carries time, power, cadence and virtual speed, marked as an indoor ride.
+        {session.route?.path
+          ? `The FIT file carries time, power, cadence, virtual speed and the real ${session.route.name} road with its elevation, marked as a virtual ride so Strava shows the map.`
+          : 'The FIT file carries time, power, cadence and virtual speed, marked as an indoor ride.'}{' '}
         Nothing uploads automatically.
       </p>
       {session.source === 'demo' && (

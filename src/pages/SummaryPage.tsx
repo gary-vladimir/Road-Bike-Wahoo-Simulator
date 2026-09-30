@@ -4,7 +4,7 @@ import type { Session } from '../ride/engine';
 import { analyzeSession } from '../ride/analysis';
 import { clock, zones } from '../workouts/model';
 import { download, sessionCsv } from '../storage/store';
-import { RideChart } from '../ui/charts';
+import { RideChart, RouteMap } from '../ui/charts';
 import { Stat } from '../ui/kit';
 import ActivityExport from '../ui/ActivityExport';
 
@@ -152,6 +152,17 @@ export default function SummaryPage({
           )}
         </section>
         <div className="stack">
+          {session.route?.path && (
+            <section className="card">
+              <h2>The road</h2>
+              <div style={{ height: 220 }}>
+                <RouteMap route={session.route} meters={session.distance * 1000} />
+              </div>
+              {session.route.attribution && (
+                <p className="attribution">{session.route.attribution}</p>
+              )}
+            </section>
+          )}
           <ActivityExport key={session.id} session={session} />
           <section className="card">
             <h2>Your data</h2>

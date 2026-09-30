@@ -5,6 +5,7 @@ import { activityFileName, fitExportIssue } from '../../src/export/activity';
 import { exportSession } from '../fixtures/export-session';
 import { RideEngine } from '../../src/ride/engine';
 import { presets } from '../../src/workouts/model';
+import { realRoads } from '../../src/ride/catalog';
 
 function decode(bytes: Uint8Array) {
   const decoder = new Decoder(Stream.fromByteArray(Array.from(bytes)));
@@ -174,5 +175,29 @@ describe('Strava FIT activity export', () => {
     e.finish();
     const m = decode(sessionFit(e.session));
     expect(m.sessionMesgs[0]).toMatchObject({ totalTimerTime: 5, totalElapsedTime: 5 });
+  });
+  it('maps rides on real roads as virtual rides with positions and altitude', () => {
+    const s = exportSession();
+    s.route = structuredClone(realRoads.find((r) => r.id === 'monte-alban')!);
+    s.workout = { ...s.workout, name: 'Monte Albán' };
+    const m = decode(sessionFit(s));
+    expect(m.sessionMesgs[0].subSport).toBe('virtualActivity');
+    const located = m.recordMesgs.filter((r) => r.positionLat !== undefined);
+    expect(located.length).toBeGreaterThan(3);
+    for (const r of located) {
+      const lat = (r.positionLat as number) * (180 / 2 ** 31),
+        lon = (r.positionLong as number) * (180 / 2 ** 31);
+      // Oaxaca de Juárez.
+      expect(lat).toBeCloseTo(17.06, 1);
+      expect(lon).toBeCloseTo(-96.73, 1);
+      expect(r.enhancedAltitude).toBeGreaterThan(1500);
+    }
+    expect(m.workoutMesgs?.[0].wktDescription).toContain(
+      'Virtual ride on the real Monte Albán road',
+    );
+    // Practice roads stay indoor rides without positions.
+    const practice = decode(sessionFit(exportSession()));
+    expect(practice.sessionMesgs[0].subSport).toBe('indoorCycling');
+    expect(practice.recordMesgs.some((r) => r.positionLat !== undefined)).toBe(false);
   });
 });
