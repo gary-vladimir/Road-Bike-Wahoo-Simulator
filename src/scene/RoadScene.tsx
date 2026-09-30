@@ -59,6 +59,7 @@ function createWorld(
   groundMap: THREE.Texture,
   treeMap: THREE.Texture,
   meters: number,
+  low: boolean,
 ) {
   course.ensure(meters + 2600);
   const ground = providedGround ?? proceduralGround(course);
@@ -69,7 +70,7 @@ function createWorld(
     roughness: 1,
     color: '#a49c86',
   });
-  const tiles = new TerrainTiles(course, ground, material);
+  const tiles = new TerrainTiles(course, ground, material, low);
   const roads = new RoadChunks(course);
   const props = new PropLayers(treeMap);
   const far = new FarRing(ground, farMaterial);
@@ -132,7 +133,7 @@ function World({
   // Created and disposed together in one layout effect: React may run effects twice (Strict
   // Mode), and a world must never outlive its own disposal. Runs before the first frame.
   useLayoutEffect(() => {
-    const world = createWorld(course, providedGround, groundMap, treeMap, travel.current);
+    const world = createWorld(course, providedGround, groundMap, treeMap, travel.current, low);
     scene.add(world.group);
     scene.fog = new THREE.FogExp2(skyColors.haze, 0.00011);
     scene.background = skyColors.horizon;
@@ -147,7 +148,7 @@ function World({
       scene.fog = null;
       world.dispose();
     };
-  }, [course, providedGround, groundMap, treeMap, scene, camera]);
+  }, [course, providedGround, groundMap, treeMap, scene, camera, low]);
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.1);
     if (motion) {

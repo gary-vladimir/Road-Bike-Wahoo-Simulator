@@ -427,3 +427,24 @@
     bottom: 260px;
   }
 }
+
+.ride-map {
+  position: absolute;
+  top: 96px;
+  right: 32px;
+  width: 170px;
+  height: 170px;
+  padding: 10px;
+  border-radius: var(--radius-m);
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+  backdrop-filter: blur(10px);
+}
+.ride[data-focus='true'] .ride-map {
+  display: none;
+}
+@media (max-width: 760px) {
+  .ride-map {
+    display: none;
+  }
+}

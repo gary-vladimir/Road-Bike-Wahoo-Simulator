@@ -6,3 +6,4 @@ playwright-report/
 token.txt
 .secrets/
 .DS_Store
+.cache/

@@ -126,11 +126,14 @@ export class RoadChunks {
         roadUv.push(lateral < 0 ? 0 : 1, s / 12);
       }
       const dust = 0.36 + random(s * 0.37) * 0.06;
+      // Gravel shoulder, then a short strip sloping into the terrain so no edge can show.
       for (const [lateral, drop] of [
-        [-roadHalfWidth - shoulder, -0.1],
+        [-roadHalfWidth - shoulder - 0.8, -0.55],
+        [-roadHalfWidth - shoulder, -0.08],
         [-roadHalfWidth, 0.01],
         [roadHalfWidth, 0.01],
-        [roadHalfWidth + shoulder, -0.1],
+        [roadHalfWidth + shoulder, -0.08],
+        [roadHalfWidth + shoulder + 0.8, -0.55],
       ]) {
         side.push(p.x + rx * lateral, y + drop, p.z + rz * lateral);
         sideColor.push(dust, dust * 0.91, dust * 0.78);
@@ -139,21 +142,10 @@ export class RoadChunks {
         const a = k * 2;
         // Counter-clockwise seen from above: left edge → right edge → next sample.
         roadIdx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-        const b = k * 4;
-        sideIdx.push(
-          b,
-          b + 1,
-          b + 4,
-          b + 1,
-          b + 5,
-          b + 4,
-          b + 2,
-          b + 3,
-          b + 6,
-          b + 3,
-          b + 7,
-          b + 6,
-        );
+        const b = k * 6;
+        // Quads between neighboring lateral vertices, except across the asphalt (2→3).
+        for (const a of [b, b + 1, b + 3, b + 4])
+          sideIdx.push(a, a + 1, a + 6, a + 1, a + 7, a + 6);
       }
     }
     const make = (pos: number[], idx: number[], extra: (g: THREE.BufferGeometry) => void) => {

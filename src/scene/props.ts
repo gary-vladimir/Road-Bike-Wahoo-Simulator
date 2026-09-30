@@ -28,33 +28,48 @@ function treeCards(aspect: number) {
   return mergeGeometries([a, b])!;
 }
 
-/** Organ-pipe cactus (órgano): ribbed columns rising from a short base. */
+/**
+ * Organ-pipe cactus (órgano, Pachycereus marginatus): slender, grey-green ribbed stems rising
+ * in a tight cluster, each leaning a little outward.
+ */
 function cactusGeometry() {
   const parts: THREE.BufferGeometry[] = [];
-  const columns = 7;
-  for (let i = 0; i < columns; i++) {
-    const angle = (i / columns) * Math.PI * 2 + random(i) * 0.5;
-    const r = i === 0 ? 0 : 0.16 + random(i + 3) * 0.1;
+  const stems = 9;
+  for (let i = 0; i < stems; i++) {
+    const angle = (i / stems) * Math.PI * 2 + random(i) * 0.7;
+    const r = i === 0 ? 0 : 0.05 + random(i + 3) * 0.08;
     const h = 0.55 + random(i + 7) * 0.45;
-    const col = new THREE.CylinderGeometry(0.075, 0.085, h, 8, 1, false);
-    col.translate(Math.cos(angle) * r, h / 2 + 0.05, Math.sin(angle) * r);
-    const cap = new THREE.SphereGeometry(0.075, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-    cap.translate(Math.cos(angle) * r, h + 0.05, Math.sin(angle) * r);
-    parts.push(col, cap);
+    const width = 0.026 + random(i + 11) * 0.008;
+    // Six-sided stems (~24 triangles with the tip); the rib shading does the rest.
+    const stem = new THREE.CylinderGeometry(width, width * 1.08, h, 6, 1, true).translate(
+      0,
+      h / 2,
+      0,
+    );
+    const tip = new THREE.ConeGeometry(width, width * 1.3, 6, 1, true).translate(
+      0,
+      h + width * 0.65,
+      0,
+    );
+    for (const g of [stem, tip]) {
+      g.rotateZ((random(i + 13) - 0.5) * 0.12).rotateX((random(i + 17) - 0.5) * 0.12);
+      g.translate(Math.cos(angle) * r, 0.02, Math.sin(angle) * r);
+      parts.push(g);
+    }
   }
-  const base = new THREE.CylinderGeometry(0.2, 0.26, 0.12, 8).translate(0, 0.06, 0);
-  parts.push(base);
+  parts.push(new THREE.CylinderGeometry(0.1, 0.14, 0.08, 6, 1, true).translate(0, 0.04, 0));
   const merged = mergeGeometries(parts.map((p) => p.toNonIndexed()))!;
-  // Darken the lower stems and add vertical rib striping.
+  // Paler toward the tips, with vertical rib striping.
   const pos = merged.getAttribute('position');
   const colors: number[] = [];
-  const top = new THREE.Color('#7c8f64'),
-    low = new THREE.Color('#56684a'),
+  const top = new THREE.Color('#94a88a'),
+    low = new THREE.Color('#6a7c5f'),
     c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i),
-      rib = 0.9 + 0.1 * Math.sin(Math.atan2(pos.getZ(i), pos.getX(i)) * 16);
-    c.copy(low).lerp(top, Math.min(1, y)).multiplyScalar(rib);
+    const rib = 0.86 + 0.14 * Math.abs(Math.sin(Math.atan2(pos.getZ(i), pos.getX(i)) * 9));
+    c.copy(low)
+      .lerp(top, Math.min(1, pos.getY(i) * 1.2))
+      .multiplyScalar(rib);
     colors.push(c.r, c.g, c.b);
   }
   merged.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
@@ -66,11 +81,11 @@ function cactusGeometry() {
 function agaveGeometry() {
   const positions: number[] = [],
     colors: number[] = [];
-  for (let leaf = 0; leaf < 15; leaf++) {
+  for (let leaf = 0; leaf < 12; leaf++) {
     const angle = leaf * 2.39996,
       length = 0.75 + random(leaf) * 0.8;
     const color = new THREE.Color(leaf % 3 ? '#6d8a79' : '#a3b3a2');
-    for (let segment = 0; segment < 5; segment++) {
+    for (let segment = 0; segment < 4; segment++) {
       const row = (t: number, side: number) => {
         const width = Math.sin(t * Math.PI) * 0.13 * side;
         const radius = t * length;
@@ -80,8 +95,8 @@ function agaveGeometry() {
           Math.cos(angle) * radius - Math.sin(angle) * width,
         ];
       };
-      const a = segment / 5,
-        b = (segment + 1) / 5;
+      const a = segment / 4,
+        b = (segment + 1) / 4;
       for (const p of [row(a, -1), row(a, 1), row(b, -1), row(a, 1), row(b, 1), row(b, -1)]) {
         positions.push(...p);
         colors.push(color.r, color.g, color.b);

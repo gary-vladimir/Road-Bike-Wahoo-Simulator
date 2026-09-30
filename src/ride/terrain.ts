@@ -29,10 +29,14 @@ export type Route = {
   pathStep?: number;
   /** Absolute elevation at the start, in meters. */
   startElevation?: number;
-  /** Terrain height model shipped with a real road. */
-  terrain?: TerrainGrid;
+  /** Terrain height models shipped with a real road: detailed near it, coarse to the horizon. */
+  terrain?: { near: TerrainGrid; far: TerrainGrid };
   /** Data sources to credit, for real roads. */
   attribution?: string;
+  /** Real roads: a short label ("Classic climb"), place and start coordinates. */
+  kind?: string;
+  region?: string;
+  origin?: { lat: number; lon: number };
 };
 /** A regular height grid in the route's local meters (uint16 samples: height = offset + v × scale). */
 export type TerrainGrid = {
@@ -146,7 +150,22 @@ export function validateRoute(route: Route) {
         route.path.some(
           (p) => !Array.isArray(p) || p.length !== 2 || !p.every((n) => Number.isFinite(n)),
         ))) ||
-    (route.attribution !== undefined && typeof route.attribution !== 'string')
+    (route.attribution !== undefined && typeof route.attribution !== 'string') ||
+    (route.terrain !== undefined &&
+      ![route.terrain?.near, route.terrain?.far].every(
+        (g) =>
+          g &&
+          // Only BikeSIM's own height files, never another path on the server.
+          /^[a-z0-9-]{1,60}-(near|far)\.bin$/.test(g.file) &&
+          [g.x0, g.z0, g.spacing, g.columns, g.rows, g.offset, g.scale].every(Number.isFinite) &&
+          g.spacing > 0 &&
+          g.scale > 0 &&
+          Number.isInteger(g.columns) &&
+          Number.isInteger(g.rows) &&
+          g.columns >= 2 &&
+          g.rows >= 2 &&
+          g.columns * g.rows <= 4_000_000,
+      ))
   )
     throw new Error('Invalid real-road data');
 }

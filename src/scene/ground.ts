@@ -3,8 +3,13 @@ import type { TerrainGrid } from '../ride/terrain';
 import { simplex2 } from './noise';
 
 export const roadHalfWidth = 3.6;
-/** Terrain is flattened under the road and its shoulders out to this distance. */
-export const corridor = roadHalfWidth + 1.9;
+/**
+ * Terrain is flattened under the road, its shoulders and their edge strip out to this
+ * distance; wide enough that coarse terrain triangles never rise through the shoulder.
+ */
+export const corridor = roadHalfWidth + 3.4;
+/** How far the flattened terrain sits below the road surface. */
+export const roadBed = 0.3;
 /** Widest cut-and-fill blend between the road and the natural terrain. */
 export const maxBlend = 95;
 
@@ -65,28 +70,47 @@ export function proceduralGround(course: Course, seed = 7): Ground {
   };
 }
 
-/** A real road's elevation model: bilinear samples of a height grid with fine noise. */
-export function gridGround(grid: TerrainGrid, heights: Uint16Array, fallback: number): Ground {
+/** Bilinear height from a packed grid, or undefined outside it. */
+function sampleGrid(grid: TerrainGrid, heights: Uint16Array, x: number, z: number) {
+  const fx = (x - grid.x0) / grid.spacing,
+    fz = (z - grid.z0) / grid.spacing;
+  if (fx < 0 || fz < 0 || fx > grid.columns - 1 || fz > grid.rows - 1) return undefined;
+  const i = Math.min(grid.columns - 2, Math.floor(fx)),
+    j = Math.min(grid.rows - 2, Math.floor(fz));
+  const u = fx - i,
+    v = fz - j,
+    c = grid.columns;
+  const a = heights[j * c + i],
+    b = heights[j * c + i + 1],
+    d = heights[(j + 1) * c + i],
+    e = heights[(j + 1) * c + i + 1];
+  return grid.offset + grid.scale * ((a * (1 - u) + b * u) * (1 - v) + (d * (1 - u) + e * u) * v);
+}
+
+/**
+ * A real road's terrain: a detailed height grid near the road blended into a coarse one out to
+ * the horizon, with a little fine noise so flat ground is not glassy.
+ */
+export function gridGround(
+  near: { grid: TerrainGrid; heights: Uint16Array },
+  far: { grid: TerrainGrid; heights: Uint16Array },
+  fallback: number,
+): Ground {
   const detail = simplex2(5);
-  const sample = (x: number, z: number) => {
-    const fx = (x - grid.x0) / grid.spacing,
-      fz = (z - grid.z0) / grid.spacing;
-    if (fx < 0 || fz < 0 || fx > grid.columns - 1 || fz > grid.rows - 1) return fallback;
-    const i = Math.min(grid.columns - 2, Math.floor(fx)),
-      j = Math.min(grid.rows - 2, Math.floor(fz));
-    const u = fx - i,
-      v = fz - j;
-    const h = (c: number, r: number) => grid.offset + heights[r * grid.columns + c] * grid.scale;
-    return (
-      h(i, j) * (1 - u) * (1 - v) +
-      h(i + 1, j) * u * (1 - v) +
-      h(i, j + 1) * (1 - u) * v +
-      h(i + 1, j + 1) * u * v
-    );
+  const x1 = near.grid.x0 + (near.grid.columns - 1) * near.grid.spacing,
+    z1 = near.grid.z0 + (near.grid.rows - 1) * near.grid.spacing;
+  const broad = (x: number, z: number) => sampleGrid(far.grid, far.heights, x, z) ?? fallback;
+  const blended = (x: number, z: number) => {
+    const n = sampleGrid(near.grid, near.heights, x, z),
+      f = broad(x, z);
+    if (n === undefined) return f;
+    // Fade into the coarse grid across the last 400 m of detailed coverage.
+    const edge = Math.min(x - near.grid.x0, x1 - x, z - near.grid.z0, z1 - z);
+    return f + (n - f) * smoothstep(0, 400, edge);
   };
   return {
-    floor: (x, z) => sample(x, z),
-    natural: (x, z) => sample(x, z) + 1.2 * detail(x / 40, z / 40),
+    floor: broad,
+    natural: (x, z) => blended(x, z) + 1.2 * detail(x / 40, z / 40),
   };
 }
 
@@ -146,7 +170,7 @@ export function nearRoad(course: Course, x0: number, z0: number, x1: number, z1:
  */
 export function blendedHeight(natural: number, hit: RoadHit | null) {
   if (!hit) return natural;
-  const road = hit.y - 0.14;
+  const road = hit.y - roadBed;
   const fall = clamp(Math.abs(natural - road) * 1.7, 10, maxBlend);
   const w = smoothstep(corridor, corridor + fall, hit.distance);
   return road + (natural - road) * w;

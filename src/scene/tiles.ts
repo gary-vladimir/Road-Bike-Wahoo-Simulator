@@ -25,8 +25,10 @@ export function buildTile(
   tz: number,
   level: number,
   withProps: boolean,
+  /** Low graphics: half the near terrain resolution and sparser props. */
+  low = false,
 ) {
-  const spacing = levels[level].spacing;
+  const spacing = levels[level].spacing * (low && level < 2 ? 2 : 1);
   const n = tileSize / spacing;
   const N = n + 3; // one sample of border on every side, for seamless normals
   const x0 = tx * tileSize,
@@ -140,7 +142,7 @@ export function buildTile(
         nz: (surface(x, z - e).y - surface(x, z + e).y) / (2 * e),
       };
     };
-    const cell = level === 0 ? 7 : 14;
+    const cell = (level === 0 ? 7 : 14) * (low ? 1.6 : 1);
     const cells = tileSize / cell;
     for (let cj = 0; cj < cells; cj++)
       for (let ci = 0; ci < cells; ci++) {
@@ -167,13 +169,13 @@ export function buildTile(
             ...slopeAt(x, z, y),
           });
         } else if (h < 0.26 && h > 0.2 && clump > 0.35 && distance > corridor + 3) {
-          props.push({ kind: 'cactus', x, y: y - 0.05, z, scale: 3 + size * 3.2, rotation });
+          props.push({ kind: 'cactus', x, y: y - 0.05, z, scale: 3.2 + size * 3.6, rotation });
           props.push({
             kind: 'shadow',
             x,
             y,
             z,
-            scale: 1.4 + size,
+            scale: 1 + size * 0.8,
             rotation: 0,
             ...slopeAt(x, z, y),
           });
@@ -192,7 +194,7 @@ export function buildTile(
         }
         // Grass tufts cluster near the verge on detailed tiles.
         if (level === 0 && distance < 60)
-          for (let k = 0; k < 3; k++) {
+          for (let k = 0; k < (low ? 1 : 3); k++) {
             const gh = hash2(gx * 7 + k, gz * 5 - k, 9);
             if (gh > 0.55) continue;
             const qx = x + (hash2(gx, gz, 10 + k) - 0.5) * cell,
@@ -230,6 +232,7 @@ export class TerrainTiles {
     private course: Course,
     private ground: Ground,
     private material: THREE.Material,
+    private low = false,
   ) {}
 
   /** Plan tiles around (x, z); returns true while work remains. */
@@ -263,7 +266,15 @@ export class TerrainTiles {
     const start = performance.now();
     while (this.queue.length && performance.now() - start < budgetMs) {
       const job = this.queue.shift()!;
-      const built = buildTile(this.course, this.ground, job.tx, job.tz, job.level, job.level <= 1);
+      const built = buildTile(
+        this.course,
+        this.ground,
+        job.tx,
+        job.tz,
+        job.level,
+        job.level <= 1,
+        this.low,
+      );
       const mesh = new THREE.Mesh(built.geometry, this.material);
       mesh.matrixAutoUpdate = false;
       const old = this.tiles.get(job.key);

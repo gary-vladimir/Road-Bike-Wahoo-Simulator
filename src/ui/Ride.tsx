@@ -20,7 +20,9 @@ import { routeLength, routePosition, type Route } from '../ride/terrain';
 import { coastStatus } from '../ride/physics';
 import { RideTrainer } from '../ride/ride-trainer';
 import { TrainerSession, roadCoefficients } from '../trainer/session';
-import { ElevationProfile, WorkoutProfile } from './charts';
+import { ElevationProfile, RouteMap, WorkoutProfile } from './charts';
+import { loadGround } from '../scene/terrain-data';
+import type { Ground } from '../scene/ground';
 import { BrandMark } from './kit';
 
 /** Steepest grade within the next stretch of road, for the look-ahead hint. */
@@ -53,6 +55,10 @@ export default function Ride({
   const [fullscreenError, setFullscreenError] = useState('');
   const [sceneReady, setSceneReady] = useState(false);
   const [focus, setFocus] = useState(false);
+  // Real roads load their terrain first; procedural roads (null) need nothing.
+  const [ground, setGround] = useState<Ground | null | undefined>(() =>
+    engine.session.route?.terrain ? undefined : null,
+  );
   const onSceneReady = useCallback(() => setSceneReady(true), []);
   const container = useRef<HTMLDivElement>(null);
   const queue = useRef(Promise.resolve());
@@ -106,6 +112,20 @@ export default function Ride({
     } else engine.setBias(engine.state.bias + step * 0.05);
     refresh();
   };
+  useEffect(() => {
+    const pending = engine.session.route ? loadGround(engine.session.route) : null;
+    if (!pending) return;
+    let live = true;
+    pending
+      .then((g) => live && setGround(g))
+      .catch(() => {
+        // Ride on procedural hills rather than not at all.
+        if (live) setGround(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [engine]);
   useEffect(() => {
     if (!sceneReady) return;
     if (link && engine.state.phase === 'countdown') void link.start();
@@ -212,13 +232,16 @@ export default function Ride({
       ref={container}
     >
       <div className="ride-scene">
-        <RoadScene
-          course={engine.course}
-          motion={motion}
-          moving={running}
-          quality={quality}
-          onReady={onSceneReady}
-        />
+        {ground !== undefined && (
+          <RoadScene
+            course={engine.course}
+            ground={ground ?? undefined}
+            motion={motion}
+            moving={running}
+            quality={quality}
+            onReady={onSceneReady}
+          />
+        )}
       </div>
       <div className="ride-scrim-top" />
       <div className="ride-scrim-bottom" />
@@ -279,6 +302,11 @@ export default function Ride({
           </button>
         </div>
       </div>
+      {route?.path && (
+        <div className="ride-map" aria-label="Route map">
+          <RouteMap route={route} meters={state.distance * 1000} />
+        </div>
+      )}
       {route && running && state.power === 0 && (
         <div className="hud-chip coast-chip" aria-label="Motion status">
           <strong>{coast.trend === 'Stopped' ? 'Stopped' : 'Coasting'}</strong>

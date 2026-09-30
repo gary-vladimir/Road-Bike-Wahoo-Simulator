@@ -123,7 +123,13 @@ export class RideEngine {
     if (!Number.isFinite(bikeMass) || bikeMass < 4 || bikeMass > 30)
       throw new Error('Bike mass must be 4–30 kg');
     const riding = options?.position ?? 'hoods';
-    this.setup = createSetup({ riderMass: mass, bikeMass, position: riding });
+    // Real roads carry their starting altitude; thinner air on higher roads means less drag.
+    this.setup = createSetup({
+      riderMass: mass,
+      bikeMass,
+      position: riding,
+      altitude: options?.route?.startElevation,
+    });
     const session: Session = (this.session = {
       id: crypto.randomUUID(),
       workout: structuredClone(workout),

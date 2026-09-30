@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Play } from 'lucide-react';
-import { routes, routeLength, routePosition, type Route } from '../ride/terrain';
+import { routeLength, routePosition, type Route } from '../ride/terrain';
+import { allRoads, findRoad, practiceRoads, realRoads } from '../ride/catalog';
 import type { Session } from '../ride/engine';
 import type { DeviceSnapshot } from '../trainer/bluetooth';
 import type { Settings } from '../storage/store';
 import { clock, todaysWorkout, totalSeconds, workoutLoad, type Workout } from '../workouts/model';
 import { ridingPositions } from '../ride/physics';
 import { exampleFtp, launchIssue, type RideRequest, type RideSource } from '../app/launch';
-import { ElevationProfile, WorkoutProfile } from '../ui/charts';
+import { ElevationProfile, RouteMap, WorkoutProfile } from '../ui/charts';
 import { Segmented, Stat } from '../ui/kit';
 
 export type Page = 'ride' | 'workouts' | 'history' | 'settings' | 'trainer';
@@ -98,12 +99,54 @@ export function SourceNote({
   );
 }
 
+function RoadGrid({
+  roads,
+  selected,
+  onPick,
+}: {
+  roads: Route[];
+  selected: Route;
+  onPick: (r: Route) => void;
+}) {
+  return (
+    <div className="route-grid">
+      {roads.map((r) => {
+        const s = routeStats(r);
+        return (
+          <button
+            key={r.id}
+            className="route-card"
+            aria-pressed={r.id === selected.id}
+            onClick={() => onPick(r)}
+          >
+            <img src={`/scenes/${r.id}.jpg`} alt="" loading="lazy" />
+            {r.kind && <span className="chip chip-accent real-badge">{r.kind}</span>}
+            <span className="route-card-body">
+              <strong>{r.name}</strong>
+              <span>
+                {s.km.toFixed(1)} km · {Math.round(s.climb)} m · up to {s.steepest}%
+              </span>
+              <ElevationProfile route={r} height={36} className="elevation mini" />
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const statsCache = new Map<string, ReturnType<typeof computeStats>>();
 function routeStats(route: Route) {
+  let stats = statsCache.get(route.id);
+  if (!stats) statsCache.set(route.id, (stats = computeStats(route)));
+  return stats;
+}
+function computeStats(route: Route) {
   const length = routeLength(route);
   return {
     km: length / 1000,
     climb: routePosition(route, length).ascent,
-    steepest: Math.max(...route.points.map((p) => p.grade)),
+    steepest: Math.round(Math.max(...route.points.map((p) => p.grade))),
   };
 }
 
@@ -124,9 +167,7 @@ export default function RidePage({
   onNavigate: (page: Page) => void;
   onOpenWorkout: (workout: Workout) => void;
 }) {
-  const [route, setRoute] = useState<Route>(
-    () => routes.find((r) => r.id === remembered()) ?? routes[0],
-  );
+  const [route, setRoute] = useState<Route>(() => findRoad(remembered() ?? '') ?? allRoads[0]);
   const [source, setSource] = useState<RideSource>(() => preferredSource(settings, device));
   const options = sourceOptions(settings, 'road');
   const chosen = options.some((o) => o.value === source) ? source : 'demo';
@@ -192,34 +233,24 @@ export default function RidePage({
                 onNavigate={onNavigate}
               />
             </div>
-            <span className="hero-tag">PROCEDURAL ROAD · OAXACA-INSPIRED</span>
+            {route.path && <RouteMap route={route} className="hero-map" />}
+            <span className="hero-tag">
+              {route.path
+                ? `REAL ROAD · ${route.region?.toUpperCase() ?? 'OAXACA'}`
+                : 'PRACTICE ROAD · OAXACA-INSPIRED'}
+            </span>
           </div>
+          {route.attribution && <p className="attribution">{route.attribution}</p>}
           <div className="section-head">
-            <h2>Roads</h2>
-            <span>Distance sets the terrain · you set the effort</span>
+            <h2>Real Oaxaca roads</h2>
+            <span>OpenStreetMap roads · real elevation</span>
           </div>
-          <div className="route-grid">
-            {routes.map((r) => {
-              const s = routeStats(r);
-              return (
-                <button
-                  key={r.id}
-                  className="route-card"
-                  aria-pressed={r.id === route.id}
-                  onClick={() => pick(r)}
-                >
-                  <img src={`/scenes/${r.id}.jpg`} alt="" loading="lazy" />
-                  <span className="route-card-body">
-                    <strong>{r.name}</strong>
-                    <span>
-                      {s.km.toFixed(1)} km · {Math.round(s.climb)} m · up to {s.steepest}%
-                    </span>
-                    <ElevationProfile route={r} height={36} className="elevation mini" />
-                  </span>
-                </button>
-              );
-            })}
+          <RoadGrid roads={realRoads} selected={route} onPick={pick} />
+          <div className="section-head">
+            <h2>Practice roads</h2>
+            <span>Short procedural roads for warm-ups and testing</span>
           </div>
+          <RoadGrid roads={practiceRoads} selected={route} onPick={pick} />
         </section>
         <aside className="stack">
           <section className="card">

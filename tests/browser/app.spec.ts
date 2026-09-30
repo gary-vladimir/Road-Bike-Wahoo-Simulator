@@ -145,5 +145,5 @@ test('a road demo shows the ride dock and focus mode keeps Pause reachable', asy
   await expect(page.locator('.dock-track')).toBeVisible();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await page.getByRole('button', { name: 'Finish & save ride' }).click();
-  await expect(page.getByRole('heading', { name: 'Valley warm-up' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Monte Albán' })).toBeVisible();
 });

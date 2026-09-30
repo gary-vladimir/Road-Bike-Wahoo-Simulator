@@ -7,6 +7,7 @@ import {
   groundColor,
   nearRoad,
   proceduralGround,
+  roadBed,
 } from '../../src/scene/ground';
 import { buildTile, tileSize } from '../../src/scene/tiles';
 import { simplex2, hash2 } from '../../src/scene/noise';
@@ -22,7 +23,7 @@ describe('terrain around the road', () => {
         far = course.offset(s, 400);
       const road = nearRoad(course, side.x - 1, side.z - 1, side.x + 1, side.z + 1);
       const under = blendedHeight(ground.natural(side.x, side.z), road(side.x, side.z));
-      expect(under).toBeCloseTo(course.elevation(s) - 0.14, 1);
+      expect(under).toBeCloseTo(course.elevation(s) - roadBed, 1);
       const away = nearRoad(course, far.x - 1, far.z - 1, far.x + 1, far.z + 1);
       expect(blendedHeight(ground.natural(far.x, far.z), away(far.x, far.z))).toBe(
         ground.natural(far.x, far.z),

@@ -1,7 +1,7 @@
 // Headless scene probe: screenshots the capture harness and times tile streaming.
 // Run inside the devcontainer with the dev server up: node tests/visual/probe.mjs [route] [meters]
 import { chromium } from '@playwright/test';
-const [route = 'foothills', distance = '1300'] = process.argv.slice(2);
+const [route = 'foothills', distance = '1300', quality = 'high'] = process.argv.slice(2);
 const browser = await chromium.launch({
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
@@ -11,8 +11,12 @@ page.on('pageerror', (e) => errors.push(e.message));
 await page.goto(
   `http://localhost:5173/tests/visual/scene.html?route=${route}&distance=${distance}`,
 );
-await page.waitForSelector('body[data-ready="true"]', { timeout: 60000 });
-await page.screenshot({ path: `test-results/visual/probe-${route}-${distance}.jpg`, quality: 85 });
+await page.waitForSelector('body[data-ready="true"]', { timeout: 90000 });
+await page.screenshot({
+  path: `test-results/visual/probe-${route}-${distance}.jpg`,
+  quality: 85,
+  timeout: 120000,
+});
 const result = await page.evaluate(() => {
   const w = window.__bikesimScene;
   const cam = w.camera.position;

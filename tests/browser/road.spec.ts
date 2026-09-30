@@ -6,8 +6,11 @@ test('road library: selecting a road updates the hero; previews are local images
   request,
 }) => {
   await page.goto('/');
-  await expect(page.locator('.hero-title')).toHaveText('Valley warm-up');
-  await expect(page.locator('.route-card')).toHaveCount(4);
+  // Real Oaxaca roads come first; Monte Albán leads.
+  await expect(page.locator('.hero-title')).toHaveText('Monte Albán');
+  await expect(page.getByRole('img', { name: 'Map of Monte Albán' })).toBeVisible();
+  await expect(page.getByText(/OpenStreetMap contributors/)).toBeVisible();
+  await expect(page.locator('.route-card')).toHaveCount(8);
   await page.locator('.route-card', { hasText: 'Rolling foothills' }).click();
   await expect(page.locator('.hero-title')).toHaveText('Rolling foothills');
   await expect(page.locator('.hero-img')).toHaveAttribute('src', '/scenes/foothills.jpg');

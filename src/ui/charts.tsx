@@ -219,3 +219,87 @@ export const RideChart = memo(function RideChart({ session }: { session: Session
     </>
   );
 });
+
+/** A real road seen from above, north up, with the rider's position. */
+export const RouteMap = memo(function RouteMap({
+  route,
+  meters,
+  className = 'route-map',
+}: {
+  route: Route;
+  meters?: number;
+  className?: string;
+}) {
+  const shape = useMemo(() => {
+    const path = route.path;
+    if (!path?.length) return null;
+    const every = Math.max(1, Math.floor(path.length / 400));
+    const pts = path.filter((_, i) => i % every === 0 || i === path.length - 1);
+    const xs = pts.map((p) => p[0]),
+      zs = pts.map((p) => p[1]);
+    const x0 = Math.min(...xs),
+      x1 = Math.max(...xs),
+      z0 = Math.min(...zs),
+      z1 = Math.max(...zs);
+    const span = Math.max(x1 - x0, z1 - z0, 1);
+    const k = 180 / span;
+    const ox = 100 - ((x0 + x1) / 2) * k,
+      oz = 100 - ((z0 + z1) / 2) * k;
+    const project = (x: number, z: number) => [ox + x * k, oz + z * k] as const;
+    return {
+      line: pts
+        .map(([x, z]) =>
+          project(x, z)
+            .map((v) => v.toFixed(1))
+            .join(','),
+        )
+        .join(' '),
+      project,
+    };
+  }, [route]);
+  if (!shape || !route.path) return null;
+  const step = route.pathStep ?? 10;
+  const [sx, sz] = shape.project(...route.path[0]);
+  const [ex, ez] = shape.project(...route.path.at(-1)!);
+  let here: readonly [number, number] | undefined;
+  if (meters !== undefined) {
+    const f = Math.min(route.path.length - 1, Math.max(0, meters / step));
+    const i = Math.min(route.path.length - 2, Math.floor(f)),
+      t = f - i;
+    const [ax, az] = route.path[i],
+      [bx, bz] = route.path[i + 1];
+    here = shape.project(ax + (bx - ax) * t, az + (bz - az) * t);
+  }
+  return (
+    <svg className={className} viewBox="0 0 200 200" role="img" aria-label={`Map of ${route.name}`}>
+      <polyline
+        points={shape.line}
+        fill="none"
+        stroke="rgb(245 241 234 / 0.35)"
+        strokeWidth="6"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <polyline
+        points={shape.line}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <circle cx={sx} cy={sz} r="4" fill="#f5f1ea" />
+      <rect x={ex - 4} y={ez - 4} width="8" height="8" fill="#f5f1ea" />
+      {here && (
+        <circle
+          cx={here[0]}
+          cy={here[1]}
+          r="6.5"
+          fill="var(--accent)"
+          stroke="#0b0e12"
+          strokeWidth="2.5"
+        />
+      )}
+    </svg>
+  );
+});

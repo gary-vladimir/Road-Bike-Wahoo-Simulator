@@ -26,7 +26,7 @@ import Ride from './ui/Ride';
 import FtpTest from './ui/FtpTest';
 import WorkoutEditor from './ui/WorkoutEditor';
 import { BrandMark } from './ui/kit';
-import { routes } from './ride/terrain';
+import { findRoad } from './ride/catalog';
 
 const pages: { id: Page; label: string }[] = [
   { id: 'ride', label: 'Ride' },
@@ -148,7 +148,7 @@ export default function App() {
   };
   const rideAgain = (session: Session) => {
     if (lastRequest && summary?.id === session.id) return start(lastRequest);
-    const route = session.route && routes.find((r) => r.id === session.route!.id);
+    const route = session.route && findRoad(session.route.id);
     const source: RideSource =
       session.source === 'demo' ? 'demo' : session.trainerControl ? 'control' : 'live';
     if (route) return start({ kind: 'road', route, source });

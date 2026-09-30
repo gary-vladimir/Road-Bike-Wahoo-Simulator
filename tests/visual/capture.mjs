@@ -23,14 +23,18 @@ await fs.mkdir('test-results/visual', { recursive: true });
 if (process.argv.includes('--previews')) {
   const preview = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   for (const [route, distance] of [
+    ['monte-alban', 9600],
+    ['san-felipe', 4200],
+    ['tule-mitla', 9000],
+    ['teotitlan', 2600],
     ['valley', 190],
     ['foothills', 1300],
     ['descent', 180],
     ['ascent', 2400],
   ]) {
     await preview.goto(`${base}/tests/visual/scene.html?route=${route}&distance=${distance}`);
-    await preview.waitForSelector('body[data-ready="true"]', { timeout: 60000 });
-    await preview.screenshot({ path: `public/scenes/${route}.jpg`, quality: 86 });
+    await preview.waitForSelector('body[data-ready="true"]', { timeout: 120000 });
+    await preview.screenshot({ path: `public/scenes/${route}.jpg`, quality: 84, timeout: 120000 });
   }
   await preview.close();
 }
