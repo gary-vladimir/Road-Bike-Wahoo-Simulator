@@ -13,7 +13,7 @@ import {
   type FtpStartingLoad,
 } from '../ride/ftp-test';
 import { download, loadFtpAssessments, saveFtpAssessment } from '../storage/store';
-import { clock } from '../workouts/model';
+import { clock, countdown } from '../workouts/model';
 import { Stat } from './kit';
 
 export default function FtpTest({
@@ -253,7 +253,7 @@ export default function FtpTest({
           </div>
           <p>
             {clock(report!.elapsed)} elapsed ·{' '}
-            {clock(
+            {countdown(
               ramp
                 ? 60 - ((report!.elapsed - ftpWarmupSeconds) % 60)
                 : ftpWarmupSeconds - report!.elapsed,

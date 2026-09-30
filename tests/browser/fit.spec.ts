@@ -105,7 +105,7 @@ test('newly finished demo downloads an explicitly labeled FIT from its summary',
   await page.getByRole('button', { name: 'Ride', exact: true }).click();
   await page.getByRole('button', { name: 'Start ride' }).click();
   await waitForInitialRide(page);
-  // The HUD clock rounds upward; 0:03 establishes at least two recorded seconds.
+  // The HUD clock shows whole elapsed seconds; 0:03 establishes at least three recorded seconds.
   await expect(page.locator('.dock-figure strong').nth(1)).toHaveText('0:03', { timeout: 6000 });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await page.getByRole('button', { name: 'Finish & save ride' }).click();

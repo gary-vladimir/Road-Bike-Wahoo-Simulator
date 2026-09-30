@@ -36,14 +36,17 @@ export type Workout = {
 export const maxIntensity = 1.6;
 export const totalSeconds = (w: Workout) => w.blocks.reduce((n, b) => n + b.seconds, 0);
 /** m:ss, or h:mm:ss from one hour. */
-export const clock = (seconds: number) => {
-  const n = Math.max(0, Math.ceil(seconds));
+const hms = (n: number) => {
   const h = Math.floor(n / 3600),
     m = Math.floor((n % 3600) / 60),
     s = n % 60;
   const ss = s.toString().padStart(2, '0');
   return h ? `${h}:${m.toString().padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 };
+/** Elapsed time in whole seconds, like a stopwatch (and like Strava): 25:24.9 reads 25:24. */
+export const clock = (seconds: number) => hms(Math.max(0, Math.floor(seconds + 1e-6)));
+/** Time remaining, rounded up so a countdown reads 0:01 until it reaches zero. */
+export const countdown = (seconds: number) => hms(Math.max(0, Math.ceil(seconds - 1e-6)));
 export function validateWorkout(w: Workout): void {
   if (
     !w ||

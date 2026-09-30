@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { analyzeSession } from '../../src/ride/analysis';
 import { RideEngine } from '../../src/ride/engine';
 import { routes, routeWorkout } from '../../src/ride/terrain';
-import { clock, presets, workoutLoad, zones } from '../../src/workouts/model';
+import { clock, countdown, presets, workoutLoad, zones } from '../../src/workouts/model';
 
 function ride(watts: (t: number) => number, seconds: number, ftp: number | null = 200) {
   const w = presets.find((x) => x.id === 'endurance')!;
@@ -50,6 +50,11 @@ describe('ride analysis', () => {
     expect(load.stress).toBeLessThan(45);
     expect(clock(59)).toBe('0:59');
     expect(clock(3725)).toBe('1:02:05');
+    // Elapsed time reads like a stopwatch (and Strava); countdowns round up.
+    expect(clock(1524.1)).toBe('25:24');
+    expect(countdown(1524.1)).toBe('25:25');
+    expect(countdown(12)).toBe('0:12');
+    expect(countdown(0.2)).toBe('0:01');
   });
 
   it('keeps every preset valid for automatic ERG at a typical FTP', async () => {

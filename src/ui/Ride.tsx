@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { cues } from './audio';
 import type { default as Scene, RideMotion } from '../scene/RoadScene';
-import { clock, position, totalSeconds } from '../workouts/model';
+import { clock, countdown, position, totalSeconds } from '../workouts/model';
 import { RideEngine, type Session } from '../ride/engine';
 import { trainer } from '../trainer/bluetooth';
 import { saveSession } from '../storage/store';
@@ -516,7 +516,7 @@ export default function Ride({
               <span className="dock-spacer" />
               <div className="metric end">
                 <span className="metric-label">Interval left</span>
-                <span className="metric-value xl">{clock(current.remaining)}</span>
+                <span className="metric-value xl">{countdown(current.remaining)}</span>
               </div>
             </div>
             <div className="dock-track">
