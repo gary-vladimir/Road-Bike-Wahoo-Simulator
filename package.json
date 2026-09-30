@@ -7,8 +7,8 @@
     "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
-    "format": "prettier --write src tests *.ts *.json .devcontainer README.md docs",
-    "format:check": "prettier --check src tests *.ts *.json .devcontainer README.md docs",
+    "format": "prettier --write src tests scripts *.ts *.json .devcontainer README.md docs",
+    "format:check": "prettier --check src tests scripts *.ts *.json .devcontainer README.md docs",
     "test": "vitest run",
     "test:browser": "playwright test"
   },

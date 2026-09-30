@@ -195,7 +195,9 @@ async function grid(project, bounds, spacing, zoom, file) {
   const offset = Math.floor(lo) - 20,
     scale = 0.1;
   const packed = new Uint16Array(heights.length);
-  heights.forEach((h, i) => (packed[i] = Math.max(0, Math.min(65535, Math.round((h - offset) / scale)))));
+  heights.forEach(
+    (h, i) => (packed[i] = Math.max(0, Math.min(65535, Math.round((h - offset) / scale)))),
+  );
   await fs.writeFile(path.join(publicDir, file), Buffer.from(packed.buffer));
   return { file, x0: bounds.x0, z0: bounds.z0, spacing, columns, rows, offset, scale };
 }
@@ -211,7 +213,9 @@ async function build(def) {
   const local = line.map(([lat, lon]) => project.toLocal(lat, lon));
   // Drop duplicate nodes, resample every 10 m, and ease out digitizing kinks.
   const dense = resample(
-    local.filter((p, i) => i === 0 || Math.hypot(p[0] - local[i - 1][0], p[1] - local[i - 1][1]) > 0.5),
+    local.filter(
+      (p, i) => i === 0 || Math.hypot(p[0] - local[i - 1][0], p[1] - local[i - 1][1]) > 0.5,
+    ),
     pathStep,
   );
   const smooth = dense.map((p, i) =>
@@ -231,7 +235,8 @@ async function build(def) {
     const i = m / pathStep;
     const before = heights[Math.max(0, i - perProfile)],
       after = heights[Math.min(heights.length - 1, i + perProfile)];
-    const span = (Math.min(heights.length - 1, i + perProfile) - Math.max(0, i - perProfile)) * pathStep;
+    const span =
+      (Math.min(heights.length - 1, i + perProfile) - Math.max(0, i - perProfile)) * pathStep;
     const grade = Math.max(-18, Math.min(18, ((after - before) / span) * 100));
     profile.push({ meters: m, grade: Math.round(grade * 100) / 100 });
   }
