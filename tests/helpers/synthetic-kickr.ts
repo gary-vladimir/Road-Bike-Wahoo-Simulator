@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 /**
  * Replace navigator.bluetooth with a synthetic KICKR that streams Indoor Bike Data every 200 ms,
@@ -106,3 +106,26 @@ export async function installSyntheticKickr(page: Page) {
 
 export const controlWrites = (page: Page) =>
   page.evaluate(() => (window as unknown as { mockControlWrites: number[][] }).mockControlWrites);
+
+/** Lighter rendering for software WebGL, trainer control on, then pair the synthetic KICKR. */
+export async function pairWithControl(page: Page, control = true) {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Graphics quality').selectOption('low');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByRole('status')).toHaveText('Settings saved.');
+  if (control) {
+    await page.getByRole('switch', { name: 'Let BikeSIM control my KICKR' }).check();
+    await expect(page.getByRole('status')).toHaveText('Trainer control is on.');
+  }
+  await page.getByRole('button', { name: 'Trainer connection' }).click();
+  await page.getByRole('button', { name: 'Pair KICKR via Bluetooth' }).click();
+  await expect(page.getByRole('status').first()).toContainText('live');
+}
+
+export const simGrades = (writes: number[][]) =>
+  writes
+    .filter((w) => w[0] === 0x11)
+    .map((w) => new DataView(Uint8Array.from(w).buffer).getInt16(3, true) / 100);
+export const ergWatts = (writes: number[][]) =>
+  writes.filter((w) => w[0] === 5).map((w) => w[1] + 256 * w[2]);

@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { Download, ArrowUpRight } from 'lucide-react';
+import { Download, ArrowUpRight, Copy } from 'lucide-react';
 import type { Session } from '../ride/engine';
 import { activityFileName, activityTimeline, fitExportIssue } from '../export/activity';
 import { download } from '../storage/store';
@@ -10,7 +10,8 @@ export default function ActivityExport({ session }: { session: Session }) {
     [message, setMessage] = useState(''),
     [error, setError] = useState('');
   const issue = fitExportIssue(session);
-  const descriptionId = useId();
+  const titleId = useId(),
+    descriptionId = useId();
   const presentation = activityPresentation(session);
   const copy = async (value: string, label: string) => {
     setError('');
@@ -18,111 +19,105 @@ export default function ActivityExport({ session }: { session: Session }) {
       await navigator.clipboard.writeText(value);
       setMessage(`${label} copied. Paste it into Strava’s upload form.`);
     } catch {
-      setError('Clipboard is unavailable. Select and copy the text below manually.');
+      setError('Clipboard is unavailable. Select and copy the text manually.');
     }
   };
   return (
-    <section className="panel activity-export" aria-label="Strava file export">
-      <div className="eyebrow">TAKE YOUR RIDE WITH YOU</div>
-      <h2>Upload your ride to Strava.</h2>
-      <p>
-        Download the FIT activity file, then select it on Strava’s file upload page. It includes
-        recorded time, power, available cadence, and virtual speed and distance. The activity is
-        marked as indoor cycling.
+    <section className="card" aria-label="Strava file export">
+      <h2>Share on Strava</h2>
+      <p className="muted">
+        The FIT file carries time, power, cadence and virtual speed, marked as an indoor ride.
+        Nothing uploads automatically.
       </p>
       {session.source === 'demo' && (
-        <p className="notice">
-          Demo ride: this file contains simulated exercise data, not a real training activity. Its
-          filename is marked DEMO.
-        </p>
+        <p className="notice">Demo ride: the file holds simulated data and is named DEMO.</p>
       )}
-      <div className="summary-actions">
-        <button
-          className="primary"
-          disabled={busy || !!issue}
-          onClick={async () => {
-            setBusy(true);
-            setError('');
-            setMessage('');
-            try {
-              const { sessionFit } = await import('../export/fit');
-              const bytes = sessionFit(session);
-              download(
-                activityFileName(session),
-                Uint8Array.from(bytes).buffer,
-                'application/octet-stream',
-              );
-              setMessage(
-                'FIT download ready. Choose this file in Strava, review the activity, then save it.',
-              );
-            } catch (err) {
-              setError(`Could not export FIT: ${(err as Error).message}`);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <Download size={17} />
-          {busy ? 'Preparing FIT…' : 'Download FIT for Strava'}
-        </button>
-        <a
-          className="secondary"
-          href="https://www.strava.com/upload/select"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Open Strava file upload <ArrowUpRight size={17} />
-        </a>
-      </div>
-      <details className="export-presentation">
+      <button
+        className="btn btn-primary"
+        disabled={busy || !!issue}
+        onClick={async () => {
+          setBusy(true);
+          setError('');
+          setMessage('');
+          try {
+            const { sessionFit } = await import('../export/fit');
+            const bytes = sessionFit(session);
+            download(
+              activityFileName(session),
+              Uint8Array.from(bytes).buffer,
+              'application/octet-stream',
+            );
+            setMessage('FIT file downloaded. Choose it on Strava’s upload page, then save.');
+          } catch (err) {
+            setError(`Could not export FIT: ${(err as Error).message}`);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Download size={17} />
+        {busy ? 'Preparing FIT…' : 'Download FIT for Strava'}
+      </button>
+      <a
+        className="btn"
+        href="https://www.strava.com/upload/select"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Open Strava file upload <ArrowUpRight size={17} />
+      </a>
+      <details>
         <summary>Title and description for Strava</summary>
-        <p className="fine-print">
-          Strava may ignore titles and descriptions inside FIT files. Copy these into its upload
-          form if needed. The FIT also stores the title and a short workout description.
-        </p>
-        <label>
-          Activity title
-          <input readOnly value={presentation.title} onFocus={(e) => e.target.select()} />
-        </label>
-        <button className="secondary" onClick={() => void copy(presentation.title, 'Title')}>
-          Copy title
-        </button>
-        <label htmlFor={descriptionId}>Activity description</label>
-        <textarea
-          id={descriptionId}
-          readOnly
-          rows={7}
-          value={presentation.description}
-          onFocus={(e) => e.target.select()}
-        />
-        <button
-          className="secondary"
-          onClick={() => void copy(presentation.description, 'Description')}
-        >
-          Copy description
-        </button>
+        <div className="stack" style={{ gap: 12, marginTop: 12 }}>
+          <label className="field" htmlFor={titleId}>
+            Activity title
+          </label>
+          <input
+            id={titleId}
+            readOnly
+            value={presentation.title}
+            onFocus={(e) => e.target.select()}
+          />
+          <button className="btn btn-s" onClick={() => void copy(presentation.title, 'Title')}>
+            <Copy size={15} /> Copy title
+          </button>
+          <label className="field" htmlFor={descriptionId}>
+            Activity description
+          </label>
+          <textarea
+            id={descriptionId}
+            readOnly
+            rows={6}
+            value={presentation.description}
+            onFocus={(e) => e.target.select()}
+          />
+          <button
+            className="btn btn-s"
+            onClick={() => void copy(presentation.description, 'Description')}
+          >
+            <Copy size={15} /> Copy description
+          </button>
+        </div>
       </details>
       {issue && <p className="notice">{issue}</p>}
       {error && (
-        <p className="error" role="alert">
+        <p className="alert" role="alert">
           {error}
         </p>
       )}
-      {message && <p role="status">{message}</p>}
-      <p className="fine-print">
-        The file is created on this computer. You choose when to upload it. Distance and speed are
-        simulated; no outdoor GPS route or unmeasured heart rate is included.
-      </p>
+      {message && (
+        <p className="muted" role="status">
+          {message}
+        </p>
+      )}
       {activityTimeline(session).legacy && (
-        <p className="fine-print">
-          Older ride: exact pause durations were not recorded. The FIT file uses the saved start
-          date and active riding time.
+        <p className="fine">
+          Older ride: exact pause durations were not recorded, so the file uses the start time and
+          active riding time.
         </p>
       )}
       {session.status === 'interrupted' && (
-        <p className="fine-print">
-          Recovered ride: the file contains data up to the last saved checkpoint.
-        </p>
+        <p className="fine">Recovered ride: the file holds data up to the last saved moment.</p>
       )}
     </section>
   );

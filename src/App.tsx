@@ -1,88 +1,62 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import {
-  ArrowUpRight,
-  Bike,
-  Bluetooth,
-  ChevronRight,
-  Mountain,
-  Pencil,
-  Play,
-  ShieldCheck,
-  Timer,
-  X,
-} from 'lucide-react';
-import RoadScene from './scene/RoadScene';
-import Profile from './ui/Profile';
+import { X } from 'lucide-react';
 import { presets, totalSeconds, type Workout } from './workouts/model';
-import { RideEngine, type Session, type Source } from './ride/engine';
+import type { RideEngine, Session } from './ride/engine';
 import {
   defaults,
   loadSettings,
   loadWorkouts,
   loadSessions,
+  removeSession,
+  removeWorkout,
   saveSettings,
   saveWorkout,
-  removeSession,
-  type Settings as RiderSettings,
+  type Settings,
 } from './storage/store';
-import { trainer } from './trainer/bluetooth';
+import { trainer, type DeviceSnapshot } from './trainer/bluetooth';
 import { setControlGate } from './trainer/session';
+import { createRide, freshPower, type RideRequest, type RideSource } from './app/launch';
+import RidePage, { type Page } from './pages/RidePage';
+import WorkoutsPage from './pages/WorkoutsPage';
+import HistoryPage from './pages/HistoryPage';
+import SummaryPage from './pages/SummaryPage';
+import SettingsPage from './pages/SettingsPage';
+import TrainerPage from './pages/TrainerPage';
 import Ride from './ui/Ride';
-import WorkoutEditor from './ui/WorkoutEditor';
-import Diagnostics from './ui/Diagnostics';
-import History, { Summary } from './ui/History';
-import Settings from './ui/Settings';
 import FtpTest from './ui/FtpTest';
-import RoadSetup from './ui/RoadSetup';
-import { routeWorkout, type Route } from './ride/terrain';
-import {
-  workoutControlIssue,
-  workoutPowerRange,
-  workoutPowerCeiling,
-} from './ride/workout-control';
-type Page = 'Ride' | 'Workouts' | 'Ride history' | 'Trainer' | 'Settings';
-export default function App() {
-  const [page, setPage] = useState<Page>('Ride'),
-    [selected, setSelected] = useState(presets[0]),
-    [filter, setFilter] = useState('All workouts');
-  const [settings, setSettings] = useState<RiderSettings>(defaults),
-    [custom, setCustom] = useState<Workout[]>([]),
-    [sessions, setSessions] = useState<Session[]>([]);
-  const [source, setSource] = useState<Source | 'controlled'>('demo'),
-    [engine, setEngine] = useState<RideEngine | null>(null),
-    [summary, setSummary] = useState<Session | null>(null);
-  const [editor, setEditor] = useState(false),
-    [error, setError] = useState(''),
-    [loaded, setLoaded] = useState(false);
-  const device = useSyncExternalStore(trainer.subscribe, trainer.getSnapshot);
-  // Trainer sessions check the rider's current Settings switch each time one opens.
-  const controlEnabled = useRef(false);
-  controlEnabled.current = settings.trainerControl === true;
-  useEffect(() => setControlGate(() => controlEnabled.current), []);
-  const canControl = settings.trainerControl === true;
-  const [ftpTest, setFtpTest] = useState(false);
-  const ergIssue = workoutControlIssue(selected, settings.ftp);
-  const ergRange = settings.ftp === null ? null : workoutPowerRange(selected, settings.ftp);
-  const refresh = async () => {
-    const [profile, workouts, rides] = await Promise.all([
-      loadSettings(),
-      loadWorkouts(),
-      loadSessions(),
-    ]);
-    setSettings(profile);
-    setCustom(workouts);
-    setSessions(rides);
-  };
+import WorkoutEditor from './ui/WorkoutEditor';
+import { BrandMark } from './ui/kit';
+import { routes } from './ride/terrain';
+
+const pages: { id: Page; label: string }[] = [
+  { id: 'ride', label: 'Ride' },
+  { id: 'workouts', label: 'Workouts' },
+  { id: 'history', label: 'History' },
+  { id: 'settings', label: 'Settings' },
+];
+
+function TrainerChip({ device, onClick }: { device: DeviceSnapshot; onClick: () => void }) {
+  const [, tick] = useState(0);
   useEffect(() => {
-    void trainer.restore();
-    void refresh()
-      .catch(() =>
-        setError(
-          'Local storage is unavailable. You can preview workouts, but ride saving may fail.',
-        ),
-      )
-      .finally(() => setLoaded(true));
+    const timer = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(timer);
   }, []);
+  const live = freshPower(device);
+  return (
+    <button className="trainer-chip" onClick={onClick} aria-label="Trainer connection">
+      <span
+        className={`dot ${device.status === 'connected' ? 'live' : device.status === 'connecting' ? 'busy' : ''}`}
+      />
+      {device.status === 'connected' ? device.name : 'Pair your KICKR'}
+      {device.status === 'connected' && (
+        <span className="muted">{live ? `${device.telemetry.power ?? 0} W` : 'idle'}</span>
+      )}
+    </button>
+  );
+}
+
+/** Read-only workout list for browsers that expose WebMCP; never touches the trainer. */
+function useWebMcp(custom: Workout[]) {
   useEffect(() => {
     const context = (
       document as Document & {
@@ -114,84 +88,80 @@ export default function App() {
         ),
       ).catch(() => {});
     } catch {
-      /* The app works without optional WebMCP. */
+      /* Optional. */
     }
     return () => lifecycle.abort();
   }, [custom]);
-  const start = () => {
+}
+
+export default function App() {
+  const [page, setPage] = useState<Page>('ride');
+  const [settings, setSettings] = useState<Settings>(defaults);
+  const [custom, setCustom] = useState<Workout[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [selected, setSelected] = useState<Workout>(presets.find((w) => w.id === 'sweet-spot')!);
+  const [engine, setEngine] = useState<RideEngine | null>(null);
+  const [lastRequest, setLastRequest] = useState<RideRequest | null>(null);
+  const [summary, setSummary] = useState<Session | null>(null);
+  const [editing, setEditing] = useState<Workout | null>(null);
+  const [ftpTest, setFtpTest] = useState(false);
+  const [error, setError] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const device = useSyncExternalStore(trainer.subscribe, trainer.getSnapshot);
+  // Trainer sessions check the rider's current Settings switch each time one opens.
+  const controlEnabled = useRef(false);
+  controlEnabled.current = settings.trainerControl === true;
+  useEffect(() => setControlGate(() => controlEnabled.current), []);
+  useWebMcp(custom);
+  const refresh = async () => {
+    const [profile, workouts, rides] = await Promise.all([
+      loadSettings(),
+      loadWorkouts(),
+      loadSessions(),
+    ]);
+    setSettings(profile);
+    setCustom(workouts);
+    setSessions(rides);
+  };
+  useEffect(() => {
+    void trainer.restore();
+    void refresh()
+      .catch(() =>
+        setError('Local storage is unavailable. You can look around, but rides may not save.'),
+      )
+      .finally(() => setLoaded(true));
+  }, []);
+  const navigate = (next: Page) => {
+    setPage(next);
+    setSummary(null);
+    setError('');
+    window.scrollTo(0, 0);
+  };
+  const start = (request: RideRequest) => {
     setError('');
     try {
-      if (source !== 'demo') {
-        if (
-          device.status !== 'connected' ||
-          device.telemetry.powerAt === undefined ||
-          performance.now() - device.telemetry.powerAt > 3000
-        )
-          throw new Error(
-            'Pair your KICKR in Trainer, then pedal to receive fresh power before starting.',
-          );
-        if (settings.ftp === null)
-          throw new Error('Enter your known FTP in Settings before starting a live workout.');
-      }
-      if (source === 'controlled') {
-        if (ergIssue) throw new Error(ergIssue);
-        const device = trainer.controlSource('erg');
-        if (
-          device.range.increment !== 1 ||
-          device.range.min > 40 ||
-          device.range.max < workoutPowerCeiling(selected, settings.ftp!)
-        )
-          throw new Error('The trainer power range cannot represent this workout.');
-      }
-      setEngine(
-        new RideEngine(
-          selected,
-          source === 'controlled' ? 'bluetooth' : source,
-          settings.ftp ?? 200,
-          settings.mass,
-          {
-            trainerControl: source === 'controlled' ? 'erg' : undefined,
-            bikeMass: settings.bikeMass ?? 9,
-            wheel: settings.wheel,
-            position: settings.position,
-          },
-        ),
-      );
+      setEngine(createRide(request, settings, device));
+      setLastRequest(request);
     } catch (e) {
       setError((e as Error).message);
     }
   };
-  const startRoad = (route: Route, source: Source, controlled = false) => {
-    setError('');
-    try {
-      if (
-        source === 'bluetooth' &&
-        (device.status !== 'connected' ||
-          device.telemetry.powerAt === undefined ||
-          performance.now() - device.telemetry.powerAt > 3000)
-      )
-        throw new Error('Pair your KICKR in Trainer and confirm fresh power before starting.');
-      if (controlled) trainer.controlSource('sim');
-      setEngine(
-        new RideEngine(routeWorkout(route), source, settings.ftp, settings.mass, {
-          route,
-          trainerControl: controlled ? 'sim' : undefined,
-          bikeMass: settings.bikeMass ?? 9,
-          wheel: settings.wheel,
-          position: settings.position,
-        }),
-      );
-    } catch (error) {
-      setError((error as Error).message);
-    }
+  const rideAgain = (session: Session) => {
+    if (lastRequest && summary?.id === session.id) return start(lastRequest);
+    const route = session.route && routes.find((r) => r.id === session.route!.id);
+    const source: RideSource =
+      session.source === 'demo' ? 'demo' : session.trainerControl ? 'control' : 'live';
+    if (route) return start({ kind: 'road', route, source });
+    return start({ kind: 'workout', workout: session.workout, source });
   };
+
   if (ftpTest)
     return (
       <FtpTest
-        canControl={canControl}
+        canControl={settings.trainerControl === true}
         onClose={() => {
           void refresh()
-            .catch(() => setError('Could not refresh rider settings.'))
+            .catch(() => setError('Could not refresh your settings.'))
             .finally(() => setFtpTest(false));
         }}
       />
@@ -205,77 +175,85 @@ export default function App() {
         onFinish={(s) => {
           setEngine(null);
           setSummary(s);
+          window.scrollTo(0, 0);
           void loadSessions()
             .then(setSessions)
-            .catch(() =>
-              setError('History could not be refreshed. Export this summary to keep a copy.'),
-            );
+            .catch(() => setError('History could not be refreshed. Export this ride to keep it.'));
         }}
       />
     );
-  const navigate = (next: Page) => {
-    setPage(next);
-    setSummary(null);
-    setError('');
-    window.scrollTo(0, 0);
-  };
-  const workouts = [...presets, ...custom],
-    filtered = workouts.filter(
-      (w) =>
-        filter === 'All workouts' || (filter === 'My workouts' ? w.custom : w.category === filter),
-    );
   return (
-    <div className="app-shell">
+    <div className="app">
       <header className="topbar">
-        <button onClick={() => navigate('Ride')} className="brand" aria-label="BikeSIM home">
-          <Bike size={29} />
-          <span>
-            BIKE<span>SIM</span>
-          </span>
+        <button className="brand" onClick={() => navigate('ride')} aria-label="BikeSIM home">
+          <BrandMark />
+          <span className="brand-name">BIKESIM</span>
         </button>
-        <nav aria-label="Main navigation">
-          {(['Ride', 'Workouts', 'Ride history', 'Trainer', 'Settings'] as Page[]).map((p) => (
+        <nav className="nav" aria-label="Main">
+          {pages.map((p) => (
             <button
-              key={p}
-              className={page === p && !summary ? 'active' : ''}
-              onClick={() => navigate(p)}
+              key={p.id}
+              aria-current={page === p.id && !summary ? 'page' : undefined}
+              onClick={() => navigate(p.id)}
             >
-              {p}
+              {p.label}
             </button>
           ))}
         </nav>
-        <button className="top-status" onClick={() => navigate('Trainer')}>
-          <ShieldCheck size={15} /> Local & private <span className="separator" />
-          <Bluetooth size={16} />{' '}
-          {device.status === 'connected' ? 'Trainer connected' : 'Trainer offline'}
-        </button>
+        <span className="topbar-spacer" />
+        <TrainerChip device={device} onClick={() => navigate('trainer')} />
       </header>
       {error && (
-        <div className="error-banner" role="alert">
-          {error}
+        <div className="alert banner" role="alert">
+          <span>{error}</span>
           <button aria-label="Dismiss message" onClick={() => setError('')}>
             <X size={18} />
           </button>
         </div>
       )}
       {summary ? (
-        <Summary session={summary} onBack={() => navigate(summary.route ? 'Ride' : 'Workouts')} />
-      ) : page === 'Ride' ? (
-        <RoadSetup settings={settings} loaded={loaded} onStart={startRoad} />
-      ) : page === 'Trainer' ? (
-        <Diagnostics settings={settings} />
-      ) : page === 'Settings' ? (
-        <Settings
-          settings={settings}
-          onFtpTest={() => setFtpTest(true)}
-          onSave={async (s) => {
-            await saveSettings(s);
-            setSettings(s);
-          }}
-          onImport={refresh}
+        <SummaryPage
+          session={summary}
+          onBack={() => setSummary(null)}
+          onRideAgain={() => rideAgain(summary)}
         />
-      ) : page === 'Ride history' ? (
-        <History
+      ) : page === 'ride' ? (
+        <RidePage
+          settings={settings}
+          sessions={sessions}
+          device={device}
+          loaded={loaded}
+          onStart={start}
+          onNavigate={navigate}
+          onOpenWorkout={(w) => {
+            setSelected(w);
+            navigate('workouts');
+          }}
+        />
+      ) : page === 'workouts' ? (
+        <WorkoutsPage
+          settings={settings}
+          device={device}
+          custom={custom}
+          selected={selected}
+          loaded={loaded}
+          onSelect={setSelected}
+          onStart={start}
+          onCustomize={setEditing}
+          onDelete={async (w) => {
+            try {
+              await removeWorkout(w.id);
+              setCustom(await loadWorkouts());
+              setSelected(presets[0]);
+            } catch {
+              setError('Could not delete this workout.');
+            }
+          }}
+          onFtpTest={() => setFtpTest(true)}
+          onNavigate={navigate}
+        />
+      ) : page === 'history' ? (
+        <HistoryPage
           sessions={sessions}
           onOpen={setSummary}
           onDelete={async (id) => {
@@ -287,198 +265,33 @@ export default function App() {
             }
           }}
         />
+      ) : page === 'trainer' ? (
+        <TrainerPage settings={settings} onOpenSettings={() => navigate('settings')} />
       ) : (
-        <main className="library">
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">ERG · STRUCTURED POWER WORKOUTS</div>
-              <h1>Find your next ride.</h1>
-              <p>A focused workout. An open road. Just you.</p>
-            </div>
-            <span className="pill">
-              <span className="status-dot" /> Demo ready
-            </span>
-          </div>
-          <section className="panel ftp-entry">
-            <div>
-              <h2>
-                {settings.ftp === null ? 'New to power training?' : `Your FTP: ${settings.ftp} W`}
-              </h2>
-              <p>
-                A guided ramp test estimates your FTP and sets your workout targets. No previous FTP
-                needed.
-              </p>
-            </div>
-            <button className="secondary" disabled={!loaded} onClick={() => setFtpTest(true)}>
-              Take an FTP test
-            </button>
-          </section>
-          <section className="feature">
-            <div className="feature-copy">
-              <span className="eyebrow">A ROAD OF YOUR OWN</span>
-              <h2>
-                Somewhere
-                <br />
-                worth pedaling.
-              </h2>
-              <p>
-                Structured training in the foothills.
-                <br />
-                Start with a workout below.
-              </p>
-              <div className="feature-foot">
-                <Mountain size={19} />
-                <div>
-                  Oaxaca foothills<span>Procedural landscape · Offline</span>
-                </div>
-                <ArrowUpRight size={20} />
-              </div>
-            </div>
-            <div className="feature-scene">
-              <RoadScene speed={8} quality={settings.quality} />
-              <span className="scene-tag">OAXACA, MÉXICO · INSPIRED LANDSCAPE</span>
-            </div>
-          </section>
-          <div className="section-title">
-            <h2>Choose your effort</h2>
-            <span>{workouts.length} workouts · made for your own rhythm</span>
-          </div>
-          <div className="filters" aria-label="Workout categories">
-            {[
-              'All workouts',
-              'Endurance',
-              'Sweet spot',
-              'Hills',
-              'Recovery',
-              'Tempo',
-              'Threshold',
-              'Cadence',
-              'My workouts',
-            ].map((f) => (
-              <button
-                key={f}
-                aria-pressed={f === filter}
-                className={f === filter ? 'selected' : ''}
-                onClick={() => setFilter(f)}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-          <div className="workout-layout">
-            <div className="workout-grid">
-              {filtered.map((w) => (
-                <button
-                  key={w.id}
-                  aria-pressed={selected.id === w.id}
-                  className={`workout-card ${selected.id === w.id ? 'chosen' : ''}`}
-                  onClick={() => setSelected(w)}
-                >
-                  <div className="card-top">
-                    <span className="eyebrow">{w.custom ? 'My workout' : w.category}</span>
-                    <ArrowUpRight size={17} />
-                  </div>
-                  <h3>{w.name}</h3>
-                  <Profile workout={w} />
-                  <div className="card-meta">
-                    <span>
-                      <Timer size={15} /> {Math.round(totalSeconds(w) / 60)} min
-                    </span>
-                    <span>Power workout</span>
-                  </div>
-                </button>
-              ))}
-              {filtered.length === 0 && (
-                <div className="empty-state">
-                  <h3>A workout of your own.</h3>
-                  <p>Choose any preset and use Customize to save your version.</p>
-                </div>
-              )}
-            </div>
-            <aside className="workout-detail">
-              <span className="eyebrow">TODAY'S RIDE</span>
-              <h2>{selected.name}</h2>
-              <p>{selected.description}</p>
-              <Profile workout={selected} large />
-              <div className="detail-stats">
-                <span>
-                  <strong>{Math.round(totalSeconds(selected) / 60)}</strong> minutes
-                </span>
-                <span>
-                  <strong>{selected.blocks.length}</strong> intervals
-                </span>
-                <span>
-                  <strong>
-                    {Math.round(
-                      Math.max(...selected.blocks.map((b) => Math.max(b.from, b.to))) * 100,
-                    )}
-                    %
-                  </strong>{' '}
-                  peak FTP
-                </span>
-              </div>
-              <label className="source-label">
-                Ride source
-                <select
-                  value={source}
-                  onChange={(e) => setSource(e.target.value as Source | 'controlled')}
-                >
-                  <option value="demo">Demo · simulated rider</option>
-                  <option value="bluetooth">KICKR · live power, read-only</option>
-                  {canControl && <option value="controlled">KICKR · automatic ERG workout</option>}
-                </select>
-              </label>
-              <div className="start-note">
-                {source === 'demo'
-                  ? `Demo FTP: ${settings.ftp ?? 200} W${settings.ftp === null ? ' (example)' : ''}. No trainer commands.`
-                  : source === 'controlled'
-                    ? `BikeSIM sets your trainer to each target${ergRange ? ` (${ergRange.min}–${ergRange.max} W at ${settings.ftp} W FTP)` : ''}. It starts at 50 W once you pedal.`
-                    : 'Live metrics and target guidance. Automatic resistance is not enabled.'}
-              </div>
-              {source === 'controlled' && (
-                <>
-                  {ergIssue && <p role="alert">{ergIssue}</p>}
-                  <p className="fine-print">
-                    Small chainring and a middle cog work best. If your cadence stays low for a few
-                    seconds, the trainer eases to 50 W until you spin back up.
-                  </p>
-                </>
-              )}
-              <button
-                className="primary"
-                onClick={start}
-                disabled={!loaded || (source === 'controlled' && !!ergIssue)}
-              >
-                <Play size={18} />{' '}
-                {source === 'demo'
-                  ? 'Start demo ride'
-                  : source === 'controlled'
-                    ? 'Start ERG workout'
-                    : 'Start live-power ride'}{' '}
-                <ChevronRight size={17} />
-              </button>
-              <button className="secondary full customize-button" onClick={() => setEditor(true)}>
-                <Pencil size={15} /> Customize workout
-              </button>
-              <p className="fine-print">10-second countdown · Stop at any time</p>
-            </aside>
-          </div>
-        </main>
+        <SettingsPage
+          key={loaded ? 'loaded' : 'loading'}
+          settings={settings}
+          onFtpTest={() => setFtpTest(true)}
+          onSave={async (s) => {
+            await saveSettings(s);
+            setSettings(s);
+          }}
+          onImport={refresh}
+        />
       )}
-      <footer>
-        BIKESIM <span>Built for the ride. Kept on your computer.</span>
+      <footer className="app-footer">
+        <span>BikeSIM · built for the ride, kept on your computer</span>
         <span>Oaxaca, MX</span>
       </footer>
-      {editor && (
+      {editing && (
         <WorkoutEditor
-          workout={selected}
-          onClose={() => setEditor(false)}
+          workout={editing}
+          onClose={() => setEditing(null)}
           onSave={async (w) => {
             await saveWorkout(w);
             setCustom(await loadWorkouts());
             setSelected(w);
-            setFilter('My workouts');
-            setEditor(false);
+            setEditing(null);
           }}
         />
       )}

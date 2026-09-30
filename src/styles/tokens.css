@@ -1,0 +1,45 @@
+/* Sierra Night: dark smoked glass over the road, cempasúchil (marigold) accent,
+   broadcast-style condensed numerals readable from the saddle. */
+:root {
+  color-scheme: dark;
+  --ink-0: #0b0e12;
+  --ink-1: #0d1015;
+  --ink-2: #141920;
+  --ink-3: #1d232c;
+  --ink-4: #262d37;
+  --line: #222831;
+  --line-strong: #343c48;
+  --text: #f5f1ea;
+  --text-2: #cfc8bb;
+  --text-3: #a39d91;
+  --accent: #f4a340;
+  --accent-strong: #ffb85c;
+  --accent-ink: #1a1206;
+  --accent-soft: rgb(244 163 64 / 0.16);
+  --good: #7ed3a6;
+  --warn: #e9c46a;
+  --danger: #e8657e;
+  --danger-ink: #2a0b12;
+  --info: #7fb6ea;
+  /* Power zones, % of FTP: <55, 55–75, 76–87, 88–94, 95–105, 106–120, >120. */
+  --z1: #7d8a96;
+  --z2: #4f9bd9;
+  --z3: #3fb58f;
+  --z4: #e9c46a;
+  --z5: #f4a340;
+  --z6: #e8657e;
+  --z7: #b86fd9;
+  --glass: rgb(12 15 19 / 0.66);
+  --glass-strong: rgb(12 15 19 / 0.82);
+  --glass-line: rgb(255 255 255 / 0.09);
+  --scrim: rgb(8 10 14);
+  --radius-s: 10px;
+  --radius-m: 16px;
+  --radius-l: 22px;
+  --radius-xl: 28px;
+  --pill: 999px;
+  --font-ui: 'Barlow', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-num: 'Barlow Condensed', 'Barlow', ui-sans-serif, system-ui, sans-serif;
+  --shadow: 0 18px 50px rgb(0 0 0 / 0.35);
+  --page-pad: clamp(16px, 3vw, 40px);
+}

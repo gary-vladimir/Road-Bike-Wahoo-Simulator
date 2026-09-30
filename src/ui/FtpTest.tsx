@@ -14,6 +14,7 @@ import {
 } from '../ride/ftp-test';
 import { download, loadFtpAssessments, saveFtpAssessment } from '../storage/store';
 import { clock } from '../workouts/model';
+import { Stat } from './kit';
 
 export default function FtpTest({
   canControl,
@@ -141,15 +142,19 @@ export default function FtpTest({
   const fresh =
     device.telemetry.powerAt !== undefined && performance.now() - device.telemetry.powerAt < 3000;
   return (
-    <main className="content-page ftp-test">
-      <div className="eyebrow">KNOW YOUR EFFORT</div>
-      <h1>Find your FTP.</h1>
-      <p>
-        FTP is the power you can sustain for about an hour. It personalizes every workout. No
-        previous FTP is needed.
-      </p>
+    <main className="page" style={{ maxWidth: 1100 }}>
+      <div className="page-head">
+        <div>
+          <span className="eyebrow">Know your effort</span>
+          <h1 className="page-title">Find your FTP.</h1>
+          <p className="lede">
+            FTP is the power you can sustain for about an hour. It personalizes every workout. No
+            previous FTP is needed.
+          </p>
+        </div>
+      </div>
       {!c && (
-        <section className="panel settings-form">
+        <section className="card">
           <h2>A guided ramp test</h2>
           <p>
             Warm up for 5 minutes at {startingLoad} W, then the target rises every minute from{' '}
@@ -193,7 +198,7 @@ export default function FtpTest({
             <li>Choose a rested day, have a fan and water ready, and stop if you feel unwell.</li>
           </ul>
           <button
-            className="primary"
+            className="btn btn-primary btn-l"
             disabled={!canControl || device.status !== 'connected' || !fresh}
             onClick={() => void start()}
           >
@@ -209,8 +214,8 @@ export default function FtpTest({
         </section>
       )}
       {active && (
-        <section className="panel" aria-label="FTP assessment in progress">
-          <div className="eyebrow">
+        <section className="card" aria-label="FTP assessment in progress">
+          <span className="eyebrow">
             {c.phase === 'waiting'
               ? 'WAITING FOR STEADY PEDALING'
               : c.phase === 'finishing'
@@ -220,7 +225,7 @@ export default function FtpTest({
                   : ramp
                     ? 'RAMP · ONE MINUTE AT A TIME'
                     : 'WARM UP'}
-          </div>
+          </span>
           <h2>
             {c.phase === 'waiting'
               ? 'Pedal above 50 rpm to begin'
@@ -232,23 +237,19 @@ export default function FtpTest({
                     ? `Step ${Math.floor((report!.elapsed - ftpWarmupSeconds) / 60) + 1}`
                     : 'Find a comfortable rhythm'}
           </h2>
-          <div className="ftp-metrics">
-            <div>
-              <strong>{fresh ? device.telemetry.power : '—'} W</strong>
-              <span>Your power</span>
-            </div>
-            <div>
-              <strong>{device.telemetry.cadence ?? '—'} rpm</strong>
-              <span>Cadence</span>
-            </div>
-            <div>
-              <strong>{ftpTarget(protocol, report!.elapsed, report!.startingLoad)} W</strong>
-              <span>Target</span>
-            </div>
-            <div>
-              <strong>{ack?.watts ?? '—'} W</strong>
-              <span>Trainer set to</span>
-            </div>
+          <div className="ftp-live">
+            <Stat
+              value={fresh ? (device.telemetry.power ?? '—') : '—'}
+              unit="W"
+              label="your power"
+            />
+            <Stat value={device.telemetry.cadence ?? '—'} unit="rpm" label="cadence" />
+            <Stat
+              value={ftpTarget(protocol, report!.elapsed, report!.startingLoad)}
+              unit="W"
+              label="target"
+            />
+            <Stat value={ack?.watts ?? '—'} unit="W" label="trainer set to" />
           </div>
           <p>
             {clock(report!.elapsed)} elapsed ·{' '}
@@ -265,29 +266,29 @@ export default function FtpTest({
             value={ramp ? (report!.elapsed - ftpWarmupSeconds) % 60 : report!.elapsed}
           />
           <p>{c.snapshot?.message}</p>
-          <div className="ftp-actions">
+          <div className="row">
             <button
-              className="primary"
+              className="btn btn-primary btn-l"
               disabled={c.phase !== 'running' || !ramp}
               onClick={() => void c.finish('effort')}
             >
               I’ve reached my limit
             </button>
             <button
-              className="secondary"
+              className="btn"
               disabled={c.phase === 'finishing'}
               onClick={() => void c.finish('cancel')}
             >
               Cancel test
             </button>
           </div>
-          <p className="fine-print">
+          <p className="fine">
             Esc ends the test. When it ends, the trainer eases to a flat road so you can cool down.
           </p>
         </section>
       )}
       {c?.phase === 'finished' && (
-        <section className="panel" aria-label="FTP assessment result">
+        <section className="card" aria-label="FTP assessment result">
           <h2>{report!.ftp ? `Estimated FTP: ${report!.ftp} W` : 'FTP unchanged'}</h2>
           <p>{report!.reason}</p>
           {report!.bestMinute && (
@@ -308,7 +309,7 @@ export default function FtpTest({
               : 'The trainer did not confirm the flat road. Check the trainer before continuing.'}
           </p>
           <button
-            className="secondary"
+            className="btn"
             onClick={() =>
               download(`bikesim-ftp-${report!.id}.json`, JSON.stringify(report, null, 2))
             }
@@ -316,30 +317,27 @@ export default function FtpTest({
             Download assessment JSON
           </button>
           {!saved && error && (
-            <button className="secondary" onClick={() => persist(report!, true)}>
+            <button className="btn" onClick={() => persist(report!, true)}>
               Retry saving result
             </button>
           )}
         </section>
       )}
       {error && (
-        <p role="alert" className="error-banner">
+        <p role="alert" className="alert">
           {error}
         </p>
       )}
       {!active && (
-        <button
-          className="secondary"
-          onClick={() => void writes.current.catch(() => {}).then(onClose)}
-        >
+        <button className="btn" onClick={() => void writes.current.catch(() => {}).then(onClose)}>
           Back to BikeSIM
         </button>
       )}
       {!active && history.length > 0 && (
-        <section className="panel">
+        <section className="card">
           <h2>Assessment history</h2>
           {history.map((r) => (
-            <div key={r.id} className="ftp-history">
+            <div key={r.id} className="stack" style={{ gap: 6 }}>
               <strong>
                 {new Date(r.startedAt).toLocaleDateString()} · {ftpProtocols[r.protocol].name}
               </strong>
@@ -348,7 +346,7 @@ export default function FtpTest({
               </p>
               <p>{r.reason}</p>
               <button
-                className="secondary"
+                className="btn"
                 onClick={() => download(`bikesim-ftp-${r.id}.json`, JSON.stringify(r, null, 2))}
               >
                 Download report

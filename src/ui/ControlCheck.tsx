@@ -47,8 +47,10 @@ export default function ControlCheck({
   const latest = useRef(snapshot);
   latest.current = snapshot;
   const lastSaved = useRef(-Infinity);
-  const active = busy || ['waiting', 'arming', 'active', 'holding'].includes(snapshot.state);
   const started = session.current !== null;
+  // Before a check starts, the placeholder snapshot is not a live session.
+  const active =
+    busy || (started && ['waiting', 'arming', 'active', 'holding'].includes(snapshot.state));
   const save = (report: ControlReport) =>
     void saveControlReport(report)
       .then(() => setSavedReport(report))
@@ -107,8 +109,7 @@ export default function ControlCheck({
   const plateaus = summarizePlateaus(evidence.current.samples);
   const running = snapshot.state === 'active' || snapshot.state === 'holding';
   return (
-    <section className="panel control-check">
-      <div className="eyebrow">MANUAL TRAINER CHECK</div>
+    <div className="stack" style={{ gap: 14, marginTop: 14 }}>
       <h2>{mode === 'sim' ? 'Feel small slope changes.' : 'Feel small power targets.'}</h2>
       <div className="segmented" aria-label="Trainer check mode">
         {(['sim', 'erg'] as const).map((m) => (
@@ -136,7 +137,7 @@ export default function ControlCheck({
       </p>
       <div className="control-check-actions">
         <button
-          className="primary"
+          className="btn btn-primary"
           disabled={!canControl || active || device.status !== 'connected'}
           onClick={() => void start()}
         >
@@ -144,7 +145,7 @@ export default function ControlCheck({
         </button>
         {(mode === 'sim' ? [-1, -0.5, 0, 0.5, 1] : [50, 75, 100]).map((value) => (
           <button
-            className="secondary"
+            className="btn btn-s"
             key={value}
             aria-pressed={running && requested === value}
             disabled={!running}
@@ -156,11 +157,11 @@ export default function ControlCheck({
         ))}
       </div>
       <div className="control-check-actions">
-        <button className="secondary" disabled={!started || !active} onClick={() => void end()}>
+        <button className="btn btn-s" disabled={!started || !active} onClick={() => void end()}>
           End on a flat road
         </button>
         <button
-          className="stop-button"
+          className="btn btn-s btn-danger"
           disabled={!started || !active}
           onClick={() => void end('stop')}
         >
@@ -187,11 +188,11 @@ export default function ControlCheck({
         </div>
       </div>
       <p role="status">
-        {busy ? 'Preparing…' : snapshot.state}
+        {busy ? 'Preparing…' : started ? snapshot.state : 'Not started'}
         {snapshot.message ? ` · ${snapshot.message}` : ''}
       </p>
       {error && (
-        <p className="error" role="alert">
+        <p className="alert" role="alert">
           {error}
         </p>
       )}
@@ -225,7 +226,7 @@ export default function ControlCheck({
       <div className="control-check-actions">
         {snapshot.audit.length > 0 && (
           <button
-            className="secondary"
+            className="btn btn-s"
             onClick={() =>
               download(
                 'bikesim-trainer-check.json',
@@ -238,7 +239,7 @@ export default function ControlCheck({
         )}
         {savedReport && (
           <button
-            className="secondary"
+            className="btn btn-s"
             onClick={() =>
               download('bikesim-last-trainer-check.json', JSON.stringify(savedReport, null, 2))
             }
@@ -247,6 +248,6 @@ export default function ControlCheck({
           </button>
         )}
       </div>
-    </section>
+    </div>
   );
 }

@@ -105,6 +105,9 @@ export async function saveWorkout(workout: Workout) {
   validateWorkout(workout);
   await (await db()).put('workouts', workout);
 }
+export async function removeWorkout(id: string) {
+  await (await db()).delete('workouts', id);
+}
 export async function saveSession(session: Session) {
   await (await db()).put('sessions', session);
 }

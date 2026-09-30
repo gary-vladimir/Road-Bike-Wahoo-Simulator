@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, Save, Trash2, X } from 'lucide-react';
-import { type Workout, validateWorkout, totalSeconds } from '../workouts/model';
-import Profile from './Profile';
+import { type Workout, validateWorkout, totalSeconds, workoutLoad } from '../workouts/model';
+import { WorkoutProfile } from './charts';
+
+const fields = [
+  { key: 'seconds', label: 'Seconds', min: 5, max: 18000 },
+  { key: 'from', label: 'Start %', min: 20, max: 160 },
+  { key: 'to', label: 'End %', min: 20, max: 160 },
+  { key: 'cadence', label: 'Cadence', min: 40, max: 130 },
+] as const;
+
 export default function WorkoutEditor({
   workout,
   onSave,
@@ -14,24 +22,27 @@ export default function WorkoutEditor({
   const [draft, setDraft] = useState<Workout>(() => ({
     ...structuredClone(workout),
     id: crypto.randomUUID(),
-    name: `${workout.name} — my version`,
+    name: workout.custom ? workout.name : `${workout.name} · my version`,
     custom: true,
   }));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    dialog.current?.showModal();
-    return () => dialog.current?.close();
+    const d = dialog.current;
+    d?.showModal();
+    return () => d?.close();
   }, []);
+  const load = workoutLoad(draft);
+  const edit = (i: number, patch: Partial<Workout['blocks'][number]>) =>
+    setDraft({
+      ...draft,
+      blocks: draft.blocks.map((b, j) => (j === i ? { ...b, ...patch } : b)),
+    });
   return (
-    <dialog
-      ref={dialog}
-      className="editor-dialog"
-      onCancel={onClose}
-      aria-labelledby="editor-title"
-    >
+    <dialog ref={dialog} className="sheet" onCancel={onClose} aria-labelledby="editor-title">
       <form
+        className="sheet-body"
         onSubmit={async (e) => {
           e.preventDefault();
           setError('');
@@ -45,16 +56,18 @@ export default function WorkoutEditor({
           }
         }}
       >
-        <div className="dialog-heading">
+        <div className="sheet-head">
           <div>
-            <span className="eyebrow">MAKE IT YOURS</span>
-            <h2 id="editor-title">Customize workout</h2>
+            <span className="eyebrow">Make it yours</span>
+            <h2 id="editor-title" style={{ fontSize: 34 }}>
+              Customize workout
+            </h2>
           </div>
-          <button type="button" aria-label="Close editor" onClick={onClose}>
-            <X />
+          <button type="button" className="icon-btn" aria-label="Close editor" onClick={onClose}>
+            <X size={18} />
           </button>
         </div>
-        <label>
+        <label className="field">
           Workout name
           <input
             value={draft.name}
@@ -63,18 +76,17 @@ export default function WorkoutEditor({
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
           />
         </label>
-        <Profile workout={draft} large />
-        <p>
-          {Math.round(totalSeconds(draft) / 60)} minutes · Targets use your FTP. Original preset
-          stays available.
+        <WorkoutProfile workout={draft} large />
+        <p className="muted">
+          {Math.round(totalSeconds(draft) / 60)} min · IF {load.intensity.toFixed(2)} · TSS{' '}
+          {load.stress}. Targets are % of your FTP; the original stays in the library.
         </p>
-        <div className="editor-table">
-          <div className="editor-row editor-labels">
+        <div className="editor-rows">
+          <div className="editor-row labels" aria-hidden="true">
             <span>Interval</span>
-            <span>Seconds</span>
-            <span>Start %</span>
-            <span>End %</span>
-            <span>Cadence</span>
+            {fields.map((f) => (
+              <span key={f.key}>{f.label}</span>
+            ))}
             <span />
           </div>
           {draft.blocks.map((b, i) => (
@@ -82,38 +94,30 @@ export default function WorkoutEditor({
               <input
                 aria-label={`Interval ${i + 1} name`}
                 value={b.name}
-                onChange={(e) =>
-                  setDraft({
-                    ...draft,
-                    blocks: draft.blocks.map((x, j) =>
-                      j === i ? { ...x, name: e.target.value } : x,
-                    ),
-                  })
-                }
+                onChange={(e) => edit(i, { name: e.target.value })}
               />
-              {(['seconds', 'from', 'to', 'cadence'] as const).map((key) => (
-                <input
-                  key={key}
-                  aria-label={`Interval ${i + 1} ${key}`}
-                  type="number"
-                  min={key === 'seconds' ? 5 : key === 'cadence' ? 40 : 20}
-                  max={key === 'seconds' ? 18000 : key === 'cadence' ? 130 : 120}
-                  step={1}
-                  required
-                  value={key === 'from' || key === 'to' ? Math.round(b[key] * 100) : b[key]}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    setDraft({
-                      ...draft,
-                      blocks: draft.blocks.map((x, j) =>
-                        j === i ? { ...x, [key]: key === 'from' || key === 'to' ? n / 100 : n } : x,
-                      ),
-                    });
-                  }}
-                />
-              ))}
+              {fields.map((f) => {
+                const percent = f.key === 'from' || f.key === 'to';
+                return (
+                  <input
+                    key={f.key}
+                    aria-label={`Interval ${i + 1} ${f.key}`}
+                    type="number"
+                    min={f.min}
+                    max={f.max}
+                    step={1}
+                    required
+                    value={percent ? Math.round(b[f.key] * 100) : b[f.key]}
+                    onChange={(e) => {
+                      const n = Number(e.target.value);
+                      edit(i, { [f.key]: percent ? n / 100 : n });
+                    }}
+                  />
+                );
+              })}
               <button
                 type="button"
+                className="icon-btn"
                 aria-label={`Delete interval ${i + 1}`}
                 disabled={draft.blocks.length === 1}
                 onClick={() =>
@@ -125,39 +129,41 @@ export default function WorkoutEditor({
             </div>
           ))}
         </div>
-        <button
-          type="button"
-          className="secondary"
-          onClick={() =>
-            setDraft({
-              ...draft,
-              blocks: [
-                ...draft.blocks,
-                {
-                  name: 'Steady effort',
-                  seconds: 120,
-                  from: 0.65,
-                  to: 0.65,
-                  cadence: 85,
-                  grade: 1,
-                  cue: 'Settle into your rhythm.',
-                },
-              ],
-            })
-          }
-        >
-          <Plus size={16} /> Add interval
-        </button>
+        <div className="row">
+          <button
+            type="button"
+            className="btn btn-s"
+            onClick={() =>
+              setDraft({
+                ...draft,
+                blocks: [
+                  ...draft.blocks,
+                  {
+                    name: 'Steady effort',
+                    seconds: 120,
+                    from: 0.65,
+                    to: 0.65,
+                    cadence: 85,
+                    grade: 1,
+                    cue: 'Settle into your rhythm.',
+                  },
+                ],
+              })
+            }
+          >
+            <Plus size={16} /> Add interval
+          </button>
+        </div>
         {error && (
-          <p className="error" role="alert">
+          <p className="alert" role="alert">
             {error}
           </p>
         )}
-        <div className="dialog-actions">
-          <button type="button" className="secondary" onClick={onClose}>
+        <div className="sheet-actions">
+          <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button className="primary" type="submit" disabled={saving}>
+          <button className="btn btn-primary" type="submit" disabled={saving}>
             <Save size={16} /> {saving ? 'Saving…' : 'Save custom workout'}
           </button>
         </div>

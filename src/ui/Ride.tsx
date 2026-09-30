@@ -1,28 +1,40 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft,
   ChevronRight,
+  Eye,
+  EyeOff,
   Maximize,
   Minus,
   Pause,
   Play,
   Plus,
-  Square,
-  Eye,
-  EyeOff,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react';
 import RoadScene, { type RideMotion } from '../scene/RoadScene';
-import Profile from './Profile';
 import { clock, position, totalSeconds } from '../workouts/model';
 import { RideEngine, type Session } from '../ride/engine';
 import { trainer } from '../trainer/bluetooth';
 import { saveSession } from '../storage/store';
-import { routeLength, routePosition } from '../ride/terrain';
+import { routeLength, routePosition, type Route } from '../ride/terrain';
 import { coastStatus } from '../ride/physics';
-import TerrainProfile from './TerrainProfile';
-import { stockWheel, virtualWheelRpm } from '../ride/bike';
 import { RideTrainer } from '../ride/ride-trainer';
 import { TrainerSession, roadCoefficients } from '../trainer/session';
+import { ElevationProfile, WorkoutProfile } from './charts';
+import { BrandMark } from './kit';
+
+/** Steepest grade within the next stretch of road, for the look-ahead hint. */
+function ahead(route: Route, meters: number, span = 300) {
+  let min = Infinity,
+    max = -Infinity;
+  for (let d = 0; d <= span; d += 25) {
+    const g = routePosition(route, meters + d).grade;
+    min = Math.min(min, g);
+    max = Math.max(max, g);
+  }
+  return { min, max };
+}
+const signed = (n: number, digits = 1) => `${n > 0 ? '+' : ''}${n.toFixed(digits)}`;
 
 export default function Ride({
   engine,
@@ -38,10 +50,9 @@ export default function Ride({
 }) {
   const [state, setState] = useState({ ...engine.state });
   const [storageError, setStorageError] = useState('');
-  const [savedAt, setSavedAt] = useState(false);
   const [fullscreenError, setFullscreenError] = useState('');
   const [sceneReady, setSceneReady] = useState(false);
-  const [immersive, setImmersive] = useState(false);
+  const [focus, setFocus] = useState(false);
   const onSceneReady = useCallback(() => setSceneReady(true), []);
   const container = useRef<HTMLDivElement>(null);
   const queue = useRef(Promise.resolve());
@@ -50,8 +61,10 @@ export default function Ride({
     speed: engine.state.speed,
     at: performance.now(),
   });
-  const controlled = !!engine.session.trainerControl;
-  const erg = engine.session.trainerControl === 'erg';
+  const session = engine.session;
+  const route = session.route;
+  const controlled = !!session.trainerControl;
+  const erg = session.trainerControl === 'erg';
   const refresh = () => setState({ ...engine.state });
   const [link] = useState(() =>
     controlled
@@ -74,23 +87,24 @@ export default function Ride({
     const snapshot = structuredClone(engine.session);
     queue.current = queue.current
       .then(() => saveSession(snapshot))
-      .then(() => {
-        setSavedAt(true);
-        setStorageError('');
-      })
-      .catch(() => {
-        setStorageError(
-          'Could not save this ride. Keep this tab open and export the summary before leaving.',
-        );
-      });
+      .then(() => setStorageError(''))
+      .catch(() =>
+        setStorageError('Could not save this ride. Keep this tab open and export it after.'),
+      );
     return queue.current;
   };
   const pause = (reason?: string) => {
     engine.pause(reason);
-    // The trainer eases to a light load right away rather than waiting for the next tick.
+    // The trainer eases to a light load right away rather than on the next tick.
     link?.update();
     refresh();
     void persist();
+  };
+  const nudge = (step: number) => {
+    if (route) {
+      if (session.source === 'demo') engine.setDemoEffort(engine.demoEffort + step * 10);
+    } else engine.setBias(engine.state.bias + step * 0.05);
+    refresh();
   };
   useEffect(() => {
     if (!sceneReady) return;
@@ -107,8 +121,8 @@ export default function Ride({
       };
       link?.update();
       setState({ ...engine.state });
-      if (performance.now() - lastSave > 5000) {
-        lastSave = performance.now();
+      if (now - lastSave > 5000) {
+        lastSave = now;
         void persist();
       }
       if (engine.state.phase === 'finished') {
@@ -124,7 +138,11 @@ export default function Ride({
     const keys = (e: KeyboardEvent) => {
       if (e.code === 'Escape' || e.code === 'Space') {
         e.preventDefault();
-        pause('Paused from the keyboard. Resume when you are ready.');
+        if (engine.state.phase !== 'paused')
+          pause('Paused from the keyboard. Resume when you are ready.');
+      } else if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+        e.preventDefault();
+        nudge(e.code === 'ArrowUp' ? 1 : -1);
       }
     };
     const leaving = (e: BeforeUnloadEvent) => {
@@ -145,12 +163,17 @@ export default function Ride({
       window.removeEventListener('beforeunload', leaving);
     };
   }, [engine, sceneReady]);
-  const current = position(engine.session.workout, state.elapsed),
-    next = engine.session.workout.blocks[current.index + 1];
-  const route = engine.session.route;
+
+  const current = position(session.workout, state.elapsed),
+    next = session.workout.blocks[current.index + 1];
   const terrain = route ? routePosition(route, state.distance * 1000) : null;
+  const look = route ? ahead(route, state.distance * 1000) : null;
   const trainerState = link?.snapshot;
   const coast = coastStatus(state.speed, state.grade, engine.setup);
+  const ftp = session.ftp ?? 0;
+  const target = state.target || Math.round(current.target * ftp * state.bias);
+  const ratio = target && state.power !== undefined ? state.power / target : undefined;
+  const running = state.phase === 'running';
   const resume = () => {
     engine.resume();
     link?.resume();
@@ -160,299 +183,299 @@ export default function Ride({
     engine.finish();
     refresh();
   };
+  const chip = (() => {
+    if (session.source === 'demo')
+      return { dot: '', text: 'Demo rider', detail: route ? `${engine.demoEffort} W effort` : '' };
+    if (!link) return { dot: 'live', text: 'KICKR CORE 2', detail: 'live power · load unchanged' };
+    if (!link.ready)
+      return { dot: link.ended ? 'error' : 'busy', text: 'KICKR CORE 2', detail: link.message };
+    if (erg)
+      return trainerState?.recovery
+        ? { dot: 'busy', text: 'Easing to 50 W', detail: 'spin up to continue' }
+        : {
+            dot: 'live',
+            text: 'KICKR CORE 2',
+            detail: `holding ${trainerState?.appliedWatts ?? '—'} W`,
+          };
+    return {
+      dot: 'live',
+      text: 'KICKR CORE 2',
+      detail: `trainer slope ${trainerState?.appliedGrade?.toFixed(1) ?? '—'}%${difficulty < 100 ? ` · ${difficulty}%` : ''}`,
+    };
+  })();
   return (
     <div
-      className="ride-screen"
+      className="ride"
       data-quality={quality}
-      data-mode={engine.session.route ? 'sim' : 'erg'}
-      data-immersive={immersive}
+      data-mode={route ? 'sim' : 'erg'}
+      data-focus={focus}
       ref={container}
     >
-      <div className="ride-world">
+      <div className="ride-scene">
         <RoadScene
           motion={motion}
-          moving={state.phase === 'running'}
+          moving={running}
           grade={state.grade}
-          route={engine.session.route}
+          route={route}
           quality={quality}
           onReady={onSceneReady}
         />
       </div>
+      <div className="ride-scrim-top" />
+      <div className="ride-scrim-bottom" />
       <div className="ride-top">
-        <button className="glass-button" onClick={() => pause()}>
-          <ArrowLeft size={18} /> Menu
-        </button>
-        <div className="ride-title">
-          <span className="eyebrow">
-            {engine.session.source === 'demo'
-              ? 'DEMO RIDE · SIMULATED DATA'
-              : controlled
-                ? erg
-                  ? 'LIVE POWER · AUTOMATIC ERG WORKOUT'
-                  : 'LIVE POWER · AUTOMATIC SIM TERRAIN'
-                : 'LIVE POWER · RESISTANCE NOT CONTROLLED'}
-          </span>
-          <h2>{engine.session.workout.name}</h2>
-        </div>
-        <div className="view-controls">
+        {route ? (
+          <div className="ride-id">
+            <BrandMark size={24} />
+            <div>
+              <div className="ride-name">{route.name}</div>
+              <div className="ride-sub">
+                {session.source === 'demo'
+                  ? 'Demo ride · simulated rider'
+                  : controlled
+                    ? 'Road ride · the trainer follows the slope'
+                    : 'Road ride · live power, trainer load unchanged'}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="ride-cue">
+            <span className="eyebrow">
+              Interval {current.index + 1} of {session.workout.blocks.length} ·{' '}
+              {erg ? 'ERG' : session.source === 'demo' ? 'demo' : 'guided'}
+            </span>
+            <div className="ride-name">{current.block.name}</div>
+            <p>{current.block.cue}</p>
+          </div>
+        )}
+        <div className="ride-actions">
+          <div className="hud-chip" aria-label="Trainer status">
+            <span className={`dot ${chip.dot}`} />
+            <span>{chip.text}</span>
+            {chip.detail && <span className="muted">{chip.detail}</span>}
+          </div>
           <button
-            className="glass-button icon-only"
-            aria-label={immersive ? 'Show ride details' : 'Focus on the road'}
-            aria-pressed={immersive}
-            onClick={() => setImmersive(!immersive)}
-            title={immersive ? 'Show ride details' : 'Focus on the road'}
+            className="hud-btn"
+            aria-label={focus ? 'Show ride details' : 'Focus on the road'}
+            aria-pressed={focus}
+            title={focus ? 'Show ride details' : 'Focus on the road'}
+            onClick={() => setFocus(!focus)}
           >
-            {immersive ? <Eye size={19} /> : <EyeOff size={19} />}
+            {focus ? <Eye size={19} /> : <EyeOff size={19} />}
           </button>
           <button
-            className="glass-button icon-only"
+            className="hud-btn"
             aria-label="Toggle fullscreen"
             onClick={() => {
               const request = document.fullscreenElement
                 ? document.exitFullscreen()
                 : container.current?.requestFullscreen();
-              void request?.catch(() =>
-                setFullscreenError('Fullscreen is unavailable in this browser.'),
-              );
+              void request?.catch(() => setFullscreenError('Fullscreen is unavailable here.'));
             }}
           >
             <Maximize size={19} />
           </button>
+          <button className="btn btn-light" onClick={() => pause()}>
+            <Pause size={17} fill="currentColor" /> Pause
+          </button>
         </div>
       </div>
-      <div className="ride-metrics">
-        <div className="power-metric">
-          <span>POWER</span>
-          <strong>
-            {state.power ?? '—'}
-            <small>W</small>
-          </strong>
-          <div>
-            {route ? (
-              'Your effort · no watt target'
-            ) : (
-              <>
-                Target{' '}
-                <b>{state.target || Math.round(current.target * (engine.session.ftp ?? 0))} W</b>
-              </>
-            )}
-          </div>
+      {route && running && state.power === 0 && (
+        <div className="hud-chip coast-chip" aria-label="Motion status">
+          <strong>{coast.trend === 'Stopped' ? 'Stopped' : 'Coasting'}</strong>
+          <span className="muted">
+            {coast.trend === 'Stopped' ? 'pedal to get going' : coast.trend.toLowerCase()}
+          </span>
         </div>
-        <div>
-          <span>CADENCE</span>
-          <strong>
-            {state.cadence ?? '—'}
-            <small>rpm</small>
-          </strong>
-          <div>
-            {route ? 'Your cadence · shift freely' : `Aim for ${current.block.cadence} rpm`}
-          </div>
-        </div>
-        <div>
-          <span>VIRTUAL SPEED</span>
-          <strong>
-            {state.speed.toFixed(1)}
-            <small>km/h</small>
-          </strong>
-          <div>{state.distance.toFixed(2)} km ridden</div>
-        </div>
-      </div>
-      <div className="ride-route">
-        <MountainBadge />
-        <strong>{route?.name ?? 'Oaxaca foothills'}</strong>
-        <span>
-          {route
-            ? controlled
-              ? 'SIM terrain · physical gears'
-              : 'SIM terrain preview · resistance unchanged'
-            : erg
-              ? 'ERG workout · automatic watts'
-              : 'ERG workout preview'}
-        </span>
-        <div>
-          <b>{state.grade.toFixed(1)}%</b> visual grade
-        </div>
-        {controlled && (
-          <div aria-label="Trainer control status">
-            {erg ? (
-              <>
-                <b>{trainerState?.appliedWatts ?? '—'} W</b> trainer target
-              </>
-            ) : (
-              <>
-                <b>{trainerState?.appliedGrade?.toFixed(1) ?? '—'}%</b> trainer slope
-                {difficulty < 100 ? ` · ${difficulty}% difficulty` : ''}
-              </>
-            )}
-            <p>{link?.message}</p>
-          </div>
-        )}
-        {route && (
-          <div className="coasting-state" aria-label="Motion status">
-            <strong>
-              {state.phase !== 'running'
-                ? 'Ride paused'
-                : state.power === 0
-                  ? coast.trend === 'Stopped'
-                    ? 'Stopped · pedal to move'
-                    : 'Coasting · 0 W'
-                  : 'Pedaling'}
-            </strong>
-            {state.phase === 'running' && state.power === 0 && coast.trend !== 'Stopped' && (
-              <em className="coasting-trend">{coast.trend}</em>
-            )}
-            <span>
-              {state.phase === 'running' && state.power === 0
-                ? coast.explanation
-                : 'Road speed follows power, gravity, and momentum.'}
-            </span>
-            <small>
-              {Math.round(virtualWheelRpm(state.speed, engine.session.wheel ?? stockWheel))} virtual
-              wheel rpm
-            </small>
-          </div>
-        )}
-      </div>
+      )}
       {(storageError || fullscreenError) && (
-        <div className="ride-warning" role="alert">
+        <div className="alert ride-toast" role="alert">
           {storageError || fullscreenError}
         </div>
       )}
-      <div className="ride-bottom">
-        <div className="interval-line">
-          {route && terrain ? (
-            <>
-              <div>
-                <span className="eyebrow">SIM · FREE RIDE</span>
-                <h2>{route.name}</h2>
-                <p>Choose your effort. Terrain follows your distance.</p>
-              </div>
-              <div className="interval-clock">
-                <strong>{(terrain.remaining / 1000).toFixed(2)} km</strong>
-                <span>road remaining</span>
-              </div>
-              <div className="next-block">
-                <span>CLIMBING</span>
-                <strong>{Math.round(terrain.ascent)} m</strong>
-                <small>{Math.round(terrain.progress * 100)}% of the road</small>
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <span className="eyebrow">
-                  INTERVAL {current.index + 1} / {engine.session.workout.blocks.length}
+      <div className="dock">
+        {route && terrain && look ? (
+          <>
+            <div className="dock-metrics">
+              <div className="metric">
+                <span className="metric-label">Power</span>
+                <span className="metric-value xl">
+                  {state.power ?? '—'}
+                  <span className="metric-unit">W</span>
                 </span>
-                <h2>{current.block.name}</h2>
-                <p>{current.block.cue}</p>
               </div>
-              <div className="interval-clock">
-                <strong>{clock(current.remaining)}</strong>
-                <span>interval remaining</span>
+              <div className="metric">
+                <span className="metric-label">Cadence</span>
+                <span className="metric-value">
+                  {state.cadence ?? '—'}
+                  <span className="metric-unit">rpm</span>
+                </span>
               </div>
-              <div className="next-block">
-                <span>UP NEXT</span>
-                <strong>{next?.name ?? 'Ride complete'}</strong>
-                <small>
-                  {next
-                    ? `${clock(next.seconds)} · ${Math.round(next.to * (engine.session.ftp ?? 0) * state.bias)} W`
-                    : 'Time to cool off.'}
-                </small>
+              <div className="metric">
+                <span className="metric-label">Speed</span>
+                <span className="metric-value">
+                  {state.speed.toFixed(1)}
+                  <span className="metric-unit">km/h</span>
+                </span>
               </div>
-            </>
-          )}
-        </div>
-        {route ? (
-          <TerrainProfile route={route} meters={state.distance * 1000} wide />
-        ) : (
-          <Profile workout={engine.session.workout} elapsed={state.elapsed} />
-        )}
-        <div className="ride-controls">
-          <span className="ride-time">
-            {clock(state.elapsed)}{' '}
-            <span>
-              {route
-                ? `/ ${(routeLength(route) / 1000).toFixed(1)} km road`
-                : `/ ${clock(totalSeconds(engine.session.workout))}`}
-            </span>
-          </span>
-          {route ? (
-            engine.session.source === 'demo' ? (
-              <label className="demo-effort">
-                Demo effort
-                <input
-                  aria-label="Demo effort watts"
-                  type="range"
-                  min={0}
-                  max={400}
-                  step={10}
-                  value={engine.demoEffort}
-                  onChange={(e) => {
-                    engine.setDemoEffort(Number(e.target.value));
-                    setState({ ...engine.state });
-                  }}
-                />
-                <span>{engine.demoEffort} W</span>
-                <button
-                  className="secondary"
-                  onClick={() => {
-                    engine.setDemoEffort(0);
-                    setState({ ...engine.state });
-                  }}
-                >
-                  Coast
-                </button>
-              </label>
-            ) : (
-              <span>Your physical gears · your pace</span>
-            )
-          ) : (
-            <div className="intensity-control">
-              <button
-                aria-label="Decrease intensity"
-                onClick={() => {
-                  engine.setBias(state.bias - 0.05);
-                  setState({ ...engine.state });
-                }}
-                disabled={state.bias <= 0.8}
-              >
-                <Minus size={15} />
-              </button>
-              <span>{Math.round(state.bias * 100)}% intensity</span>
-              <button
-                aria-label="Increase intensity"
-                onClick={() => {
-                  engine.setBias(state.bias + 0.05);
-                  setState({ ...engine.state });
-                }}
-                disabled={state.bias >= 1.1}
-              >
-                <Plus size={15} />
-              </button>
+              <span className="dock-spacer" />
+              <div className="metric accent end">
+                <span className="metric-label">
+                  {state.grade < -0.05 ? <TrendingDown size={18} /> : <TrendingUp size={18} />}
+                  Grade
+                </span>
+                <span className="metric-value xl">
+                  {signed(state.grade)}
+                  <span className="metric-unit">%</span>
+                </span>
+                <span className="metric-note">
+                  {look.max - state.grade > 0.5
+                    ? `Up to ${signed(look.max)}% in the next 300 m`
+                    : state.grade - look.min > 0.5
+                      ? `Easing to ${signed(look.min)}% ahead`
+                      : 'Steady ahead'}
+                </span>
+              </div>
             </div>
-          )}
-          <span className="saved-indicator">
-            {savedAt && !storageError ? 'Saved on this computer' : 'Saving…'}
-          </span>
-          <button className="secondary" onClick={() => pause()}>
-            <Pause size={16} /> Pause
-          </button>
-          <button
-            className="stop-button"
-            onClick={() => pause('Ride paused. Finish to save it, or resume when you are ready.')}
-          >
-            <Square size={14} fill="currentColor" /> Stop
-          </button>
-        </div>
+            <div className="dock-track">
+              <div className="dock-figure">
+                <strong>{state.distance.toFixed(2)}</strong>
+                <span>of {(routeLength(route) / 1000).toFixed(1)} km</span>
+              </div>
+              <ElevationProfile
+                route={route}
+                meters={state.distance * 1000}
+                className="elevation track-graph"
+              />
+              <div className="dock-figure">
+                <strong>{clock(state.elapsed)}</strong>
+                <span>riding</span>
+              </div>
+              <div className="dock-figure">
+                <strong>{Math.round(terrain.ascent)} m</strong>
+                <span>climbed</span>
+              </div>
+              {session.source === 'demo' && (
+                <label className="demo-effort">
+                  <span className="sr-only">Demo effort</span>
+                  <input
+                    aria-label="Demo effort watts"
+                    type="range"
+                    min={0}
+                    max={400}
+                    step={10}
+                    value={engine.demoEffort}
+                    onChange={(e) => {
+                      engine.setDemoEffort(Number(e.target.value));
+                      refresh();
+                    }}
+                  />
+                  <button
+                    className="btn btn-s"
+                    onClick={() => {
+                      engine.setDemoEffort(0);
+                      refresh();
+                    }}
+                  >
+                    Coast
+                  </button>
+                </label>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="dock-metrics">
+              <div className="metric accent">
+                <span className="metric-label">Target</span>
+                <span className="metric-value xl">
+                  {target}
+                  <span className="metric-unit">W</span>
+                </span>
+              </div>
+              <div className="metric" style={{ width: 260 }}>
+                <span className="metric-label">Power</span>
+                <span className="metric-value xl">
+                  {state.power ?? '—'}
+                  <span className="metric-unit">W</span>
+                </span>
+                <div
+                  className="power-band"
+                  role="img"
+                  aria-label={
+                    ratio === undefined
+                      ? 'No power reading'
+                      : `Power is ${Math.round((ratio - 1) * 100)}% from target`
+                  }
+                >
+                  <span className="band" style={{ left: '41.7%', width: '16.7%' }} />
+                  {ratio !== undefined && (
+                    <span
+                      className="needle"
+                      style={{ left: `${Math.min(1, Math.max(0, (ratio - 0.7) / 0.6)) * 100}%` }}
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="metric">
+                <span className="metric-label">Cadence</span>
+                <span className="metric-value">
+                  {state.cadence ?? '—'}
+                  <span className="metric-unit">rpm · aim {current.block.cadence}</span>
+                </span>
+              </div>
+              <span className="dock-spacer" />
+              <div className="metric end">
+                <span className="metric-label">Interval left</span>
+                <span className="metric-value xl">{clock(current.remaining)}</span>
+              </div>
+            </div>
+            <div className="dock-track">
+              <div className="track-graph">
+                <WorkoutProfile workout={session.workout} elapsed={state.elapsed} />
+              </div>
+              <div className="dock-figure" style={{ width: 170 }}>
+                <span>Up next</span>
+                <strong style={{ fontSize: 20 }}>
+                  {next ? `${next.name} · ${clock(next.seconds)}` : 'Finish'}
+                </strong>
+                <span>
+                  {next ? `${Math.round(next.from * ftp * state.bias)} W` : 'Nearly there'}
+                </span>
+              </div>
+              <div className="intensity" role="group" aria-label="Workout intensity">
+                <button
+                  aria-label="Decrease intensity"
+                  disabled={state.bias <= 0.8}
+                  onClick={() => nudge(-1)}
+                >
+                  <Minus size={16} />
+                </button>
+                <span>{Math.round(state.bias * 100)}%</span>
+                <button
+                  aria-label="Increase intensity"
+                  disabled={state.bias >= 1.1}
+                  onClick={() => nudge(1)}
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+              <div className="dock-figure">
+                <strong>{clock(state.elapsed)}</strong>
+                <span>of {clock(totalSeconds(session.workout))}</span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
       {state.phase === 'countdown' && (
-        <div className="ride-overlay countdown-overlay">
+        <div className="ride-overlay">
           <span className="eyebrow">
-            {sceneReady
-              ? state.elapsed > 0
-                ? 'BACK TO YOUR RHYTHM'
-                : 'YOUR ROAD IS READY'
-              : 'PREPARING THE ROAD'}
+            {!sceneReady
+              ? 'Preparing the road'
+              : state.elapsed > 0
+                ? 'Back to your rhythm'
+                : 'Your road is ready'}
           </span>
           <strong className="countdown-number">
             {sceneReady && (!link || link.ready) ? Math.ceil(state.countdown) : '…'}
@@ -461,14 +484,14 @@ export default function Ride({
             {link
               ? link.ready
                 ? erg
-                  ? 'ERG is holding 50 W. Keep pedaling; workout targets follow after the countdown.'
-                  : 'The trainer is on a flat road. Pick a comfortable gear; terrain follows the countdown.'
+                  ? 'The trainer is holding 50 W. Keep pedaling; your targets start after the countdown.'
+                  : 'The trainer is on a flat road. Pick a comfortable gear; the terrain follows.'
                 : link.message
-              : engine.session.source === 'demo'
-                ? 'Demo rider starting. No trainer commands.'
-                : 'Start pedaling. Trainer resistance is unchanged.'}
+              : session.source === 'demo'
+                ? 'The demo rider is clipping in.'
+                : 'Start pedaling. The trainer load stays as it is.'}
           </p>
-          <button className="secondary" onClick={() => pause()}>
+          <button className="btn" onClick={() => pause()}>
             Cancel countdown
           </button>
         </div>
@@ -476,22 +499,32 @@ export default function Ride({
       {state.phase === 'paused' && (
         <div className="ride-overlay">
           <div className="pause-card">
-            <span className="eyebrow">TAKE YOUR TIME</span>
+            <span className="eyebrow">Take your time</span>
             <h1>Ride paused.</h1>
             <p>{state.reason}</p>
-            {engine.session.source === 'bluetooth' && (
+            {link && (
               <p>
-                {controlled
-                  ? link?.ended
-                    ? `${link.message} Resume takes control again${erg ? ' once you pedal above 50 rpm' : ''}.`
-                    : `${erg ? 'The trainer is holding a light 50 W.' : 'The trainer is holding a flat road.'} Resume when you are ready.`
-                  : 'BikeSIM is reading only. It has not changed trainer resistance.'}
+                {link.ended
+                  ? `${link.message} Resume takes control again${erg ? ' once you pedal above 50 rpm' : ''}.`
+                  : erg
+                    ? 'The trainer is holding a light 50 W.'
+                    : 'The trainer is holding a flat road.'}
               </p>
             )}
-            <button className="primary" onClick={resume}>
-              <Play size={18} /> Resume ride <ChevronRight size={18} />
+            <div className="pause-stats">
+              <div className="dock-figure">
+                <strong>{clock(state.elapsed)}</strong>
+                <span>riding</span>
+              </div>
+              <div className="dock-figure">
+                <strong>{state.distance.toFixed(2)} km</strong>
+                <span>distance</span>
+              </div>
+            </div>
+            <button className="btn btn-primary btn-l" onClick={resume}>
+              <Play size={18} fill="currentColor" /> Resume ride <ChevronRight size={18} />
             </button>
-            <button className="secondary full" onClick={finish}>
+            <button className="btn" onClick={finish}>
               Finish & save ride
             </button>
           </div>
@@ -499,7 +532,4 @@ export default function Ride({
       )}
     </div>
   );
-}
-function MountainBadge() {
-  return <span className="route-badge">MX · 01</span>;
 }

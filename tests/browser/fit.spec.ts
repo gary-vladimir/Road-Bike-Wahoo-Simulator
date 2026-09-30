@@ -26,8 +26,8 @@ async function importRide(page: Page, s = exportSession()) {
     ),
   });
   await expect(page.getByRole('status')).toContainText('Backup imported.');
-  await page.getByRole('button', { name: 'Ride history', exact: true }).click();
-  await page.locator('.history-main').click();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.locator('.ride-row-main').click();
 }
 
 test('saved live ride downloads valid FIT with coasting and pauses, without uploading', async ({
@@ -76,8 +76,8 @@ test('saved live ride downloads valid FIT with coasting and pauses, without uplo
   expect(m.eventMesgs?.map((e) => e.eventType)).toEqual(['start', 'stopAll', 'start', 'stopAll']);
   await page.screenshot({ path: 'test-results/fit-summary-desktop.png', fullPage: true });
   await page.reload();
-  await page.getByRole('button', { name: 'Ride history', exact: true }).click();
-  await page.locator('.history-main').click();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.locator('.ride-row-main').click();
   const again = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download FIT for Strava' }).click();
   expect((await readFit(await again)).bytes).toEqual(bytes);
@@ -103,14 +103,14 @@ test('newly finished demo downloads an explicitly labeled FIT from its summary',
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByRole('status')).toHaveText('Settings saved.');
   await page.getByRole('button', { name: 'Ride', exact: true }).click();
-  await page.getByRole('button', { name: 'Start road demo' }).click();
+  await page.getByRole('button', { name: 'Start ride' }).click();
   await waitForInitialRide(page);
-  // The HUD clock rounds upward; 00:03 establishes at least two recorded seconds.
-  await expect(page.locator('.ride-time')).toContainText('00:03', { timeout: 6000 });
+  // The HUD clock rounds upward; 0:03 establishes at least two recorded seconds.
+  await expect(page.locator('.dock-figure strong').nth(1)).toHaveText('0:03', { timeout: 6000 });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await page.getByRole('button', { name: 'Finish & save ride' }).click();
   await expect(
-    page.getByText('Demo ride: this file contains simulated exercise data', { exact: false }),
+    page.getByText('Demo ride: the file holds simulated data', { exact: false }),
   ).toBeVisible();
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download FIT for Strava' }).click();
@@ -136,6 +136,6 @@ test('empty saved rides explain why FIT is unavailable and retain JSON export', 
     page.getByText('Record at least one second of riding before exporting a FIT activity.'),
   ).toBeVisible();
   const pending = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export session JSON' }).click();
+  await page.getByRole('button', { name: 'JSON', exact: true }).click();
   expect((await pending).suggestedFilename()).toMatch(/\.json$/);
 });
