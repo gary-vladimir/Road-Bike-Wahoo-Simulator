@@ -11,7 +11,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
-import RoadScene from '../scene/RoadScene';
+import RoadScene, { type RideMotion } from '../scene/RoadScene';
 import Profile from './Profile';
 import { clock, position, totalSeconds } from '../workouts/model';
 import { RideEngine, type Session } from '../ride/engine';
@@ -43,6 +43,11 @@ export default function Ride({
   const onSceneReady = useCallback(() => setSceneReady(true), []);
   const container = useRef<HTMLDivElement>(null);
   const queue = useRef(Promise.resolve());
+  const motion = useRef<RideMotion>({
+    distance: engine.state.distance * 1000,
+    speed: engine.state.speed,
+    at: performance.now(),
+  });
   const control = useRef<RideControl | null>(null);
   const controlled = !!engine.session.trainerControl;
   const erg = engine.session.trainerControl === 'erg';
@@ -88,8 +93,13 @@ export default function Ride({
     void persist();
     let lastSave = performance.now();
     const timer = setInterval(() => {
-      if (!controlled || control.current?.ready)
-        engine.tick(performance.now(), trainer.snapshot.telemetry);
+      const now = performance.now();
+      if (!controlled || control.current?.ready) engine.tick(now, trainer.snapshot.telemetry);
+      motion.current = {
+        distance: engine.state.distance * 1000,
+        speed: engine.state.speed,
+        at: now,
+      };
       control.current?.update();
       setState({ ...engine.state });
       if (performance.now() - lastSave > 5000) {
@@ -175,8 +185,8 @@ export default function Ride({
     >
       <div className="ride-world">
         <RoadScene
-          speed={state.speed}
-          distance={state.distance * 1000}
+          motion={motion}
+          moving={state.phase === 'running'}
           grade={state.grade}
           route={engine.session.route}
           quality={quality}

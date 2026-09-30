@@ -1,5 +1,14 @@
 import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
-import { Component, type ReactNode, memo, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Component,
+  type MutableRefObject,
+  type ReactNode,
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as THREE from 'three';
 import Vegetation, { type TreePlacement } from './Vegetation';
 import Horizon from './Horizon';
@@ -255,15 +264,21 @@ function Landscape({
     </>
   );
 }
+/** Latest engine state. The ride writes it on every tick; the scene reads it every frame. */
+export type RideMotion = { distance: number; speed: number; at: number };
+/** Extrapolate from the last engine tick so motion stays continuous between ticks. */
+export function predictDistance(motion: RideMotion, now: number) {
+  const ahead = THREE.MathUtils.clamp((now - motion.at) / 1000, 0, 0.25);
+  return motion.distance + (motion.speed / 3.6) * ahead;
+}
 function World({
   speed,
-  distance,
+  motion,
   grade,
   quality,
   route,
   onReady,
 }: SceneProps & { speed: number; grade: number; quality: string }) {
-  const invalidate = useThree((s) => s.invalidate);
   // One batch avoids waiting for the backdrop before requesting the ground and foliage.
   const [horizon, groundMap, treeMap] = useLoader(THREE.TextureLoader, [
     '/assets/sierra-horizon.jpg',
@@ -272,25 +287,24 @@ function World({
   ]);
   horizon.colorSpace = THREE.SRGBColorSpace;
   horizon.repeat.set(1, 1);
-  const travel = useRef(distance ?? 0),
+  const travel = useRef(motion?.current.distance ?? 0),
     ready = useRef(false);
-  const [section, setSection] = useState(Math.floor((distance ?? 0) / 240));
+  const [section, setSection] = useState(Math.floor(travel.current / 240));
   const activeSection = useRef(section);
-  useEffect(() => {
-    if (speed <= 0) return;
-    const timer = setInterval(invalidate, quality === 'low' ? 1000 / 30 : 1000 / 60);
-    return () => clearInterval(timer);
-  }, [speed > 0, quality, invalidate]);
   useFrame(({ camera }, delta) => {
     if (!ready.current) {
       ready.current = true;
       setTimeout(() => onReady?.(), 0);
     }
     const dt = Math.min(delta, 0.1);
-    if (distance !== undefined)
+    if (motion) {
+      // Engine ticks arrive at ~10 Hz. Chasing each tick's distance makes the camera surge
+      // and stall ten times per second; follow the extrapolated position instead.
+      const target = predictDistance(motion.current, performance.now());
+      const error = target - travel.current;
       travel.current =
-        speed === 0 ? distance : THREE.MathUtils.damp(travel.current, distance, 20, dt);
-    else travel.current += (speed / 3.6) * dt;
+        Math.abs(error) > 25 ? target : travel.current + error * (1 - Math.exp(-dt * 12));
+    } else travel.current += (speed / 3.6) * dt;
     const s = travel.current,
       next = Math.floor(s / 240);
     if (next !== activeSection.current) {
@@ -343,25 +357,30 @@ class SceneBoundary extends Component<
   }
 }
 type SceneProps = {
+  /** Constant preview speed in km/h when no ride motion is supplied. */
   speed?: number;
-  distance?: number;
+  motion?: MutableRefObject<RideMotion>;
   grade?: number;
   quality?: string;
   route?: Route;
+  /** Whether the view is moving; idle scenes render only on demand. */
+  moving?: boolean;
   onReady?: () => void;
 };
 function RoadScene({
   speed = 0,
-  distance,
+  motion,
   grade = 0,
   quality = 'high',
   route,
+  moving = speed > 0,
   onReady,
 }: SceneProps) {
   return (
     <SceneBoundary onReady={onReady}>
       <Canvas
-        frameloop="demand"
+        // Display-synced frames while moving; a timer-driven redraw drifts against vsync.
+        frameloop={moving ? 'always' : 'demand'}
         dpr={quality === 'low' ? 1 : [1, 1.5]}
         camera={{ fov: 66, near: 0.1, far: 3500 }}
         gl={{
@@ -373,7 +392,7 @@ function RoadScene({
       >
         <World
           speed={speed}
-          distance={distance}
+          motion={motion}
           grade={grade}
           quality={quality}
           route={route}
