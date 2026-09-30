@@ -12,7 +12,7 @@ describe('manual upload presentation', () => {
     const p = activityPresentation(s);
     expect(p.title).toBe('BikeSIM - Valley coast & climb');
     expect(p.description).toContain('Partial ride:');
-    expect(p.description).toContain('0.03 km virtual distance in 00:10');
+    expect(p.description).toContain('0.03 km virtual distance in 0:10');
     expect(p.description).toContain('automatic trainer resistance');
     expect(p.description).not.toContain('Completed');
     s.source = 'demo';
