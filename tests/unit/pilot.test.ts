@@ -259,7 +259,7 @@ describe('controlled road lifecycle with synthetic GATT', () => {
     f.engine.resume();
     await resumed.start();
     expect(resumed.ready).toBe(true);
-    expect(f.writes.slice(-3)).toEqual([[0], [17, 0, 0, 0, 0, 40, 18], [7]]);
+    expect(f.writes.slice(-3)).toEqual([[0], [17, 0, 0, 0, 0, 40, 16], [7]]);
     const ending = resumed.stop();
     await vi.advanceTimersByTimeAsync(0);
     f.ack(8);
@@ -493,7 +493,7 @@ describe('supervised pilot lifecycle with synthetic GATT only', () => {
     f.coast();
     const pilot = await f.prepare('sim');
     await pilot.start({ baselineConfirmed: true, trainerProfileConfirmed: true });
-    expect(f.writes).toEqual([[0], [0x11, 0, 0, 0, 0, 40, 18], [7]]);
+    expect(f.writes).toEqual([[0], [0x11, 0, 0, 0, 0, 40, 16], [7]]);
     expect(f.snapshots.at(-1)).toMatchObject({ state: 'running', mode: 'sim', grade: 0 });
     expect(() => pilot.setTarget(100)).toThrow('unavailable');
     expect(() => pilot.setGrade(1.1)).toThrow('limited');
@@ -503,7 +503,7 @@ describe('supervised pilot lifecycle with synthetic GATT only', () => {
     pilot.setGrade(-1);
     await vi.advanceTimersByTimeAsync(8000);
     expect(f.snapshots.at(-1)?.grade).toBe(-1);
-    expect(f.writes.at(-1)).toEqual([0x11, 0, 0, 156, 255, 40, 18]);
+    expect(f.writes.at(-1)).toEqual([0x11, 0, 0, 156, 255, 40, 16]);
     expect(f.writes.every((w) => w[0] !== 5)).toBe(true);
     await pilot.stop();
     expect(f.writes.at(-1)).toEqual([8, 1]);
@@ -544,7 +544,7 @@ describe('supervised pilot lifecycle with synthetic GATT only', () => {
     const stopping = pilot.stop();
     f.ack(0x11);
     await Promise.all([starting, stopping]);
-    expect(f.writes).toEqual([[0], [0x11, 0, 0, 0, 0, 40, 18], [8, 1]]);
+    expect(f.writes).toEqual([[0], [0x11, 0, 0, 0, 0, 40, 16], [8, 1]]);
     expect(f.disconnect).not.toHaveBeenCalled();
   });
   it('exposes selected targets immediately and captures raw machine status without extra control writes', async () => {

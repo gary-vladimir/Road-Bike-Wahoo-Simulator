@@ -5,11 +5,14 @@ import { validateRoute } from '../ride/terrain';
 import type { PilotReport } from '../trainer/pilot-evidence';
 import { stockWheel, validateWheel, type WheelSetup } from '../ride/bike';
 import { validateFtpAssessment, type FtpAssessment } from '../ride/ftp-test';
+import { ridingPositions, type RidingPosition } from '../ride/physics';
 export type Settings = {
   ftp: number | null;
   mass: number;
   bikeMass?: number;
   wheel?: WheelSetup;
+  /** Aerodynamic riding position for virtual speed and SIM drag. */
+  position?: RidingPosition;
   quality: 'high' | 'low';
 };
 export const defaults: Settings = {
@@ -17,16 +20,35 @@ export const defaults: Settings = {
   mass: 70,
   bikeMass: 9,
   wheel: stockWheel,
+  position: 'hoods',
   quality: 'high',
 };
-const db = () =>
+// One shared connection per IndexedDB factory (tests swap the factory between cases).
+let connection: { factory: IDBFactory; db: ReturnType<typeof open> } | undefined;
+const open = () =>
   openDB('bikesim', 1, {
     upgrade(db) {
       db.createObjectStore('settings');
       db.createObjectStore('workouts', { keyPath: 'id' });
       db.createObjectStore('sessions', { keyPath: 'id' });
     },
+    blocking() {
+      // Another tab needs a newer schema: release this connection.
+      void connection?.db.then((d) => d.close());
+      connection = undefined;
+    },
   });
+const db = () => {
+  if (connection?.factory !== globalThis.indexedDB) {
+    const pending = open();
+    const entry = { factory: globalThis.indexedDB, db: pending };
+    connection = entry;
+    pending.catch(() => {
+      if (connection === entry) connection = undefined;
+    });
+  }
+  return connection!.db;
+};
 export async function loadSettings(): Promise<Settings> {
   return structuredClone({ ...defaults, ...(await (await db()).get('settings', 'rider')) });
 }
@@ -134,7 +156,10 @@ export async function restoreBackup(raw: unknown) {
       (s.route && s.mode !== 'sim') ||
       (s.mode === 'sim' && !s.route) ||
       (s.bikeMass !== undefined &&
-        (!Number.isFinite(s.bikeMass) || s.bikeMass < 4 || s.bikeMass > 30))
+        (!Number.isFinite(s.bikeMass) || s.bikeMass < 4 || s.bikeMass > 30)) ||
+      (s.position !== undefined && !Object.hasOwn(ridingPositions, s.position)) ||
+      (s.airDensity !== undefined &&
+        (!Number.isFinite(s.airDensity) || s.airDensity < 0.6 || s.airDensity > 1.4))
     )
       throw new Error('Invalid session mode or bike mass');
     if (
@@ -186,6 +211,7 @@ export async function restoreBackup(raw: unknown) {
     !b.settings ||
     (b.settings.ftp !== null &&
       (!Number.isFinite(b.settings.ftp) || b.settings.ftp < 50 || b.settings.ftp > 600)) ||
+    (b.settings.position !== undefined && !Object.hasOwn(ridingPositions, b.settings.position)) ||
     !Number.isFinite(b.settings.mass) ||
     b.settings.mass < 35 ||
     b.settings.mass > 200 ||

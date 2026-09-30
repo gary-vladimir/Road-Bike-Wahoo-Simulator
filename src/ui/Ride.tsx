@@ -17,7 +17,8 @@ import { clock, position, totalSeconds } from '../workouts/model';
 import { RideEngine, type Session } from '../ride/engine';
 import { trainer } from '../trainer/bluetooth';
 import { saveSession } from '../storage/store';
-import { coastStatus, routeLength, routePosition } from '../ride/terrain';
+import { routeLength, routePosition } from '../ride/terrain';
+import { coastStatus } from '../ride/physics';
 import TerrainProfile from './TerrainProfile';
 import { stockWheel, virtualWheelRpm } from '../ride/bike';
 import { RideControl } from '../ride/ride-control';
@@ -154,12 +155,7 @@ export default function Ride({
   const acknowledgedPower = control.current?.snapshot
     ? lastPowerAcknowledgement(control.current.snapshot)?.watts
     : undefined;
-  const coast = coastStatus(
-    state.speed,
-    state.grade,
-    engine.session.mass,
-    engine.session.bikeMass ?? 9,
-  );
+  const coast = coastStatus(state.speed, state.grade, engine.setup);
   const pause = () => {
     engine.pause();
     setState({ ...engine.state });

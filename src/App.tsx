@@ -32,8 +32,8 @@ import Diagnostics from './ui/Diagnostics';
 import History, { Summary } from './ui/History';
 import Settings from './ui/Settings';
 import FtpTest from './ui/FtpTest';
-import RoadSetup, { routeWorkout } from './ui/RoadSetup';
-import type { Route } from './ride/terrain';
+import RoadSetup from './ui/RoadSetup';
+import { routeWorkout, type Route } from './ride/terrain';
 import {
   workoutControlIssue,
   workoutPowerRange,
@@ -149,6 +149,7 @@ export default function App() {
             trainerControl: source === 'controlled' ? 'erg' : undefined,
             bikeMass: settings.bikeMass ?? 9,
             wheel: settings.wheel,
+            position: settings.position,
           },
         ),
       );
@@ -173,6 +174,7 @@ export default function App() {
           trainerControl: controlled ? 'sim' : undefined,
           bikeMass: settings.bikeMass ?? 9,
           wheel: settings.wheel,
+          position: settings.position,
         }),
       );
     } catch (error) {

@@ -4,8 +4,23 @@ import {
   type ControlCommand,
   type ControlLimits,
 } from '../trainer/control';
-import { roadPhysics } from '../ride/terrain';
+import { createSetup, windCoefficient, type PhysicsSetup } from '../ride/physics';
 import type { Telemetry } from '../trainer/ftms';
+/** Road coefficients sent with every FTMS simulation command. */
+export type RoadCoefficients = {
+  windSpeed: number;
+  rollingResistance: number;
+  windResistance: number;
+};
+/** Match the trainer load to the virtual physics: same rolling and aerodynamic coefficients. */
+export function roadCoefficients(setup: PhysicsSetup = createSetup({ riderMass: 70 })) {
+  return {
+    windSpeed: setup.windSpeed,
+    rollingResistance: setup.crr,
+    // FTMS resolution is 0.01 kg/m.
+    windResistance: Math.round(windCoefficient(setup) * 100) / 100,
+  };
+}
 /** Bounded SIM controller; the caller supplies the road or diagnostic slope envelope. */
 export class SimulationSupervisor {
   state: 'idle' | 'waiting' | 'arming' | 'running' | 'stopping' | 'stopped' | 'faulted' = 'idle';
@@ -22,14 +37,13 @@ export class SimulationSupervisor {
     private limits: ControlLimits,
     private telemetry: () => Telemetry,
     private now = () => performance.now(),
+    private road: RoadCoefficients = roadCoefficients(),
   ) {}
   private command(grade: number): ControlCommand {
     return {
       kind: 'simulation',
       grade,
-      windSpeed: roadPhysics.windSpeed,
-      rollingResistance: roadPhysics.rollingResistance,
-      windResistance: roadPhysics.windResistance,
+      ...this.road,
     };
   }
   private guard() {

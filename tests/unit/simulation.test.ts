@@ -80,7 +80,8 @@ describe('SIM protocol and controller — synthetic wire only', () => {
     const f = fixture();
     await f.controller.arm({ baselineConfirmed: true, trainerProfileConfirmed: true });
     expect(f.controller.state).toBe('running');
-    expect(f.writes).toEqual([[0], [0x11, 0, 0, 0, 0, 40, 18], [7]]);
+    // Oaxaca-altitude hoods drag: Cw 0.16 kg/m; rolling 0.004.
+    expect(f.writes).toEqual([[0], [0x11, 0, 0, 0, 0, 40, 16], [7]]);
     f.advance(1000);
     await f.controller.update(4);
     expect(f.controller.grade).toBe(0.25);

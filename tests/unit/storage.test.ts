@@ -17,8 +17,7 @@ import {
 } from '../../src/storage/store';
 import { RideEngine } from '../../src/ride/engine';
 import { presets } from '../../src/workouts/model';
-import { routes } from '../../src/ride/terrain';
-import { routeWorkout } from '../../src/ui/RoadSetup';
+import { routes, routeWorkout } from '../../src/ride/terrain';
 import { PilotEvidence } from '../../src/trainer/pilot-evidence';
 import { estimateFtp, ftpTarget, type FtpAssessment } from '../../src/ride/ftp-test';
 beforeEach(() => {
@@ -167,5 +166,19 @@ describe('local persistence and backup boundaries', () => {
     await saveSession(second.session);
     await restoreBackup(b);
     expect(await loadSessions()).toHaveLength(2);
+  });
+  it('persists riding position and rejects unknown positions in backups', async () => {
+    expect((await loadSettings()).position).toBe('hoods');
+    await saveSettings({ ...(await loadSettings()), position: 'aero' });
+    // Reuses one connection for repeated reads.
+    expect((await Promise.all([loadSettings(), loadSettings()])).map((x) => x.position)).toEqual([
+      'aero',
+      'aero',
+    ]);
+    const data = await backup();
+    await expect(
+      restoreBackup({ ...data, settings: { ...data.settings, position: 'superman' } }),
+    ).rejects.toThrow('Invalid settings');
+    expect((await loadSettings()).position).toBe('aero');
   });
 });

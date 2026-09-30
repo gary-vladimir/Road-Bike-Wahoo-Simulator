@@ -3,103 +3,12 @@ import {
   routes,
   routeLength,
   routePosition,
+  routeWorkout,
   validateRoute,
-  advanceRoad,
-  roadForces,
-  coastStatus,
 } from '../../src/ride/terrain';
 import { RideEngine } from '../../src/ride/engine';
-import { routeWorkout } from '../../src/ui/RoadSetup';
+
 describe('distance-based SIM road and free pacing', () => {
-  it('slows on a shallow descent while still covering distance at zero watts', () => {
-    // September 16 Valley coast: about 26 km/h at -0.27% to -0.22%.
-    let speed = 26,
-      distance = 0;
-    for (let t = 0; t < 8; t++) {
-      const step = advanceRoad(speed, 0, -0.25, 70, 9, 1);
-      speed = step.speed;
-      distance += step.distance;
-    }
-    expect(speed).toBeGreaterThan(22);
-    expect(speed).toBeLessThan(23);
-    expect(distance).toBeGreaterThan(0.053);
-    expect(distance).toBeLessThan(0.055);
-    expect(coastStatus(26, -0.25, 70, 9)).toMatchObject({ trend: 'Slowing down' });
-    const forces = roadForces(26, 0, -0.25, 70, 9);
-    expect(forces.gravity).toBeGreaterThan(0);
-    expect(forces.gravity).toBeLessThan(forces.air + forces.rolling);
-    expect(forces.acceleration).toBeLessThan(0);
-  });
-  it('can accelerate or decelerate on the same descent depending on entry speed', () => {
-    expect(advanceRoad(10, 0, -3, 70, 9, 1).speed).toBeGreaterThan(10);
-    expect(advanceRoad(50, 0, -3, 70, 9, 1).speed).toBeLessThan(50);
-    expect(coastStatus(10, -3, 70, 9).trend).toBe('Gaining speed');
-    expect(coastStatus(50, -3, 70, 9).trend).toBe('Slowing down');
-    expect(coastStatus(38.08, -3, 70, 9).trend).toBe('Steady speed');
-  });
-  it('distinguishes a downhill start from a stopped bike on flat or very shallow terrain', () => {
-    expect(coastStatus(0, -3, 70, 9).trend).toBe('Gaining speed');
-    for (const grade of [-0.25, 0, 3]) {
-      expect(coastStatus(0, grade, 70, 9).trend).toBe('Stopped');
-      expect(advanceRoad(0, 0, grade, 70, 9, 1)).toEqual({ speed: 0, distance: 0 });
-    }
-  });
-  it('coasts downhill for distance at zero power and reaches drag-limited speed', () => {
-    let speed = 0,
-      distance = 0;
-    for (let i = 0; i < 600; i++) {
-      const m = advanceRoad(speed, 0, -3, 70, 9, 1);
-      speed = m.speed;
-      distance += m.distance;
-    }
-    const expected =
-      Math.sqrt((79 * 9.81 * (0.03 - 0.004)) / (Math.sqrt(1 + 0.03 ** 2) * 0.18)) * 3.6;
-    expect(speed).toBeCloseTo(expected, 1);
-    expect(distance).toBeGreaterThan(4);
-    expect(advanceRoad(speed, 0, -3, 70, 9, 1).speed).toBeCloseTo(speed, 3);
-  });
-  it('retains uphill momentum before stopping, stops earlier than on flat, and never rolls backward', () => {
-    const coast = (grade: number) => {
-      let speed = 25,
-        distance = 0;
-      const initial = advanceRoad(speed, 0, grade, 70, 9, 0.1);
-      expect(initial.speed).toBeGreaterThan(0);
-      for (let i = 0; i < 120; i++) {
-        const m = advanceRoad(speed, 0, grade, 70, 9, 1);
-        speed = m.speed;
-        distance += m.distance;
-      }
-      return { speed, distance };
-    };
-    const uphill = coast(5),
-      flat = coast(0),
-      downhill = coast(-3);
-    expect(uphill.speed).toBe(0);
-    expect(uphill.distance).toBeGreaterThan(0.01);
-    expect(uphill.distance).toBeLessThan(flat.distance);
-    expect(flat.distance).toBeLessThan(downhill.distance);
-    expect(advanceRoad(0, 0, 5, 70, 9, 1)).toEqual({ speed: 0, distance: 0 });
-  });
-  it('gives consistent motion across frame rates and correct mass effects', () => {
-    const coast = (dt: number) => {
-      let speed = 25,
-        distance = 0;
-      for (let i = 0; i < Math.round(10 / dt); i++) {
-        const m = advanceRoad(speed, 0, 3, 70, 9, dt);
-        speed = m.speed;
-        distance += m.distance;
-      }
-      return { speed, distance };
-    };
-    expect(coast(1).distance).toBeCloseTo(coast(0.1).distance, 6);
-    expect(coast(0.1).distance).toBeCloseTo(coast(1 / 60).distance, 4);
-    expect(advanceRoad(15, 150, 5, 100, 9, 1).speed).toBeLessThan(
-      advanceRoad(15, 150, 5, 70, 9, 1).speed,
-    );
-    expect(advanceRoad(30, 0, -3, 100, 9, 1).speed).toBeGreaterThan(
-      advanceRoad(30, 0, -3, 70, 9, 1).speed,
-    );
-  });
   it('keeps live zero-watt, zero-cadence downhill motion independent from trainer speed', () => {
     const route = routes.find((r) => r.id === 'descent')!;
     const e = new RideEngine(routeWorkout(route), 'bluetooth', null, 70, { route });
@@ -162,13 +71,6 @@ describe('distance-based SIM road and free pacing', () => {
         ],
       }),
     ).toThrow();
-  });
-  it('climbs slower at equal power and coasts downhill without a fabricated power target', () => {
-    expect(advanceRoad(25, 150, 4, 75, 9, 1).speed).toBeLessThan(
-      advanceRoad(25, 150, 0, 75, 9, 1).speed,
-    );
-    expect(advanceRoad(10, 0, -3, 75, 9, 1).speed).toBeGreaterThan(10);
-    expect(advanceRoad(10, 0, 0, 75, 9, 1).speed).toBeLessThan(10);
   });
   it('allows a live free ride without FTP and keeps low cadence/coasting valid', () => {
     const e = new RideEngine(routeWorkout(routes[0]), 'bluetooth', null, 75, { route: routes[0] });

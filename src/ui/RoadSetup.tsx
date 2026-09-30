@@ -3,28 +3,9 @@ import { Mountain, Play } from 'lucide-react';
 import { routes, routeLength, routePosition, type Route } from '../ride/terrain';
 import type { Source } from '../ride/engine';
 import type { Settings } from '../storage/store';
-import type { Workout } from '../workouts/model';
 import TerrainProfile from './TerrainProfile';
 import { stockWheel, wheelLabel } from '../ride/bike';
 import { supportsRoadControl } from '../ride/ride-control';
-export function routeWorkout(route: Route): Workout {
-  const block = {
-    name: 'Your own pace',
-    seconds: 10800,
-    from: 0.5,
-    to: 0.5,
-    cadence: 80,
-    grade: 0,
-    cue: 'Choose your own effort and cadence.',
-  };
-  return {
-    id: `route-${route.id}`,
-    name: route.name,
-    category: 'Endurance',
-    description: route.description,
-    blocks: [block, { ...block }],
-  };
-}
 export default function RoadSetup({
   settings,
   loaded,

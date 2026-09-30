@@ -1,6 +1,7 @@
 import { position, totalSeconds, validateWorkout, type Workout } from '../workouts/model';
 import type { Telemetry } from '../trainer/ftms';
-import { advanceRoad, routeLength, routePosition, validateRoute, type Route } from './terrain';
+import { routeLength, routePosition, validateRoute, type Route } from './terrain';
+import { advance, createSetup, type PhysicsSetup, type RidingPosition } from './physics';
 import { stockWheel, validateWheel, type WheelSetup } from './bike';
 import { supportsRoadControl } from './ride-control';
 import { workoutControlIssue, workoutTarget } from './workout-control';
@@ -42,6 +43,9 @@ export type Session = {
   bikeMass?: number;
   wheel?: WheelSetup;
   physicsVersion?: number;
+  /** Riding position and air density used by physics version 3 and later. */
+  position?: RidingPosition;
+  airDensity?: number;
   mode?: 'sim' | 'erg';
   trainerControl?: 'sim' | 'erg';
   route?: Route;
@@ -70,6 +74,8 @@ export class RideEngine {
   private timerRunning = false;
   private sampleElapsed = 0;
   private demoPower = 0;
+  /** Physics inputs for this ride (mass, position, air density). */
+  readonly setup: PhysicsSetup;
   demoEffort = 100;
   constructor(
     workout: Workout,
@@ -81,6 +87,7 @@ export class RideEngine {
       bikeMass?: number;
       wheel?: WheelSetup;
       trainerControl?: 'sim' | 'erg';
+      position?: RidingPosition;
     },
   ) {
     validateWorkout(workout);
@@ -106,6 +113,8 @@ export class RideEngine {
     validateWheel(options?.wheel ?? stockWheel);
     if (!Number.isFinite(bikeMass) || bikeMass < 4 || bikeMass > 30)
       throw new Error('Bike mass must be 4–30 kg');
+    const position = options?.position ?? 'hoods';
+    this.setup = createSetup({ riderMass: mass, bikeMass, position });
     this.session = {
       id: crypto.randomUUID(),
       workout: structuredClone(workout),
@@ -114,7 +123,9 @@ export class RideEngine {
       mass,
       bikeMass,
       wheel: structuredClone(options?.wheel ?? stockWheel),
-      physicsVersion: 2,
+      physicsVersion: 3,
+      position,
+      airDensity: this.setup.airDensity,
       mode: options?.route ? 'sim' : 'erg',
       trainerControl: options?.trainerControl,
       route: options?.route ? structuredClone(options.route) : undefined,
@@ -206,16 +217,15 @@ export class RideEngine {
       const grade = this.session.route
         ? routePosition(this.session.route, this.state.distance * 1000).grade
         : this.state.grade;
-      const motion = advanceRoad(
+      const motion = advance(
         this.state.speed,
         this.state.power ?? 0,
         grade,
-        this.session.mass,
-        this.session.bikeMass ?? 9,
+        this.setup,
         step / motionSteps,
       );
       this.state.speed = motion.speed;
-      this.state.distance += motion.distance;
+      this.state.distance += motion.distance / 1000;
     }
     if (this.session.route) {
       this.state.distance = Math.min(routeLength(this.session.route) / 1000, this.state.distance);

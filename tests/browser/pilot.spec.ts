@@ -304,14 +304,14 @@ test('controlled road requires readiness, supports coasting, resumes explicitly 
   await expect(page.locator('.ride-time')).toContainText('0:02');
   await page.evaluate(() => Object.assign(window, { mockPower: 0, mockCadence: 0 }));
   await expect(page.getByLabel('Motion status')).toContainText(/Coasting|Stopped · pedal to move/);
-  expect(await roadWrites(page)).toEqual([[0], [17, 0, 0, 0, 0, 40, 18], [7]]);
+  expect(await roadWrites(page)).toEqual([[0], [17, 0, 0, 0, 0, 40, 16], [7]]);
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Resume ride' })).toBeEnabled();
   expect((await roadWrites(page)).at(-1)).toEqual([8, 1]);
   await page.getByRole('button', { name: 'Resume ride' }).click();
   await expect(page.getByLabel('Trainer control status')).toContainText('Terrain control active');
   await expect(page.locator('.countdown-number')).not.toBeVisible({ timeout: 8000 });
-  expect((await roadWrites(page)).slice(-3)).toEqual([[0], [17, 0, 0, 0, 0, 40, 18], [7]]);
+  expect((await roadWrites(page)).slice(-3)).toEqual([[0], [17, 0, 0, 0, 0, 40, 16], [7]]);
   await page.screenshot({ path: 'test-results/controlled-road.png' });
   await page.evaluate(() => Object.assign(window, { mockHoldStop: true }));
   await page.getByRole('button', { name: 'Stop', exact: true }).click();
@@ -446,12 +446,12 @@ test('SIM hardware pilot permits coasting, uses only slope commands, and stops e
   );
   expect(writes).toEqual([
     [0],
-    [17, 0, 0, 0, 0, 40, 18],
+    [17, 0, 0, 0, 0, 40, 16],
     [7],
-    [17, 0, 0, 25, 0, 40, 18],
-    [17, 0, 0, 50, 0, 40, 18],
-    [17, 0, 0, 75, 0, 40, 18],
-    [17, 0, 0, 100, 0, 40, 18],
+    [17, 0, 0, 25, 0, 40, 16],
+    [17, 0, 0, 50, 0, 40, 16],
+    [17, 0, 0, 75, 0, 40, 16],
+    [17, 0, 0, 100, 0, 40, 16],
     [8, 1],
   ]);
   await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible();

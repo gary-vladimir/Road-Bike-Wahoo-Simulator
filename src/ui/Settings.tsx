@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Download, Save, Upload } from 'lucide-react';
 import { backup, download, restoreBackup, type Settings as RiderSettings } from '../storage/store';
 import { stockWheel, nominalCircumference, validateWheel, wheelLabel } from '../ride/bike';
+import { ridingPositions, type RidingPosition } from '../ride/physics';
 export default function Settings({
   settings,
   onSave,
@@ -17,7 +18,8 @@ export default function Settings({
     [mass, setMass] = useState(settings.mass.toString()),
     [bikeMass, setBikeMass] = useState((settings.bikeMass ?? 9).toString()),
     [wheel, setWheel] = useState({ ...(settings.wheel ?? stockWheel) }),
-    [quality, setQuality] = useState(settings.quality);
+    [quality, setQuality] = useState(settings.quality),
+    [position, setPosition] = useState<RidingPosition>(settings.position ?? 'hoods');
   const [message, setMessage] = useState('');
   const input = useRef<HTMLInputElement>(null);
   return (
@@ -36,6 +38,7 @@ export default function Settings({
                 mass: Number(mass),
                 bikeMass: Number(bikeMass),
                 wheel,
+                position,
                 quality,
               };
               if (
@@ -110,6 +113,24 @@ export default function Settings({
             <small>
               9 kg is an estimate, not a measured specification for your bike. Used for virtual
               physics only.
+            </small>
+          </label>
+          <label>
+            Riding position
+            <select
+              aria-label="Riding position"
+              value={position}
+              onChange={(e) => setPosition(e.target.value as RidingPosition)}
+            >
+              {Object.entries(ridingPositions).map(([id, p]) => (
+                <option key={id} value={id}>
+                  {p.label} · {p.hint} · CdA {p.cda.toFixed(2)} m²
+                </option>
+              ))}
+            </select>
+            <small>
+              Sets aerodynamic drag for virtual speed and SIM trainer load. Oaxaca’s ~1,550 m
+              altitude is included: thinner air means less drag than at sea level.
             </small>
           </label>
           <fieldset className="wheel-settings">
