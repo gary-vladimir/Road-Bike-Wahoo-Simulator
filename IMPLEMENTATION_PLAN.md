@@ -37,27 +37,27 @@ The KICKR Core 2 speaks the standard Bluetooth **FTMS** (Fitness Machine Service
 
 Everything the app needs is in FTMS:
 
-| Need | FTMS characteristic | Direction |
-| --- | --- | --- |
-| Live power, cadence, speed | Indoor Bike Data (0x2AD2) | notify, ~1–4 Hz |
-| ERG: hold a target power | Control Point (0x2AD9) op `0x05 Set Target Power` | write |
-| SIM: set road grade / wind / rolling resistance | Control Point op `0x11 Set Indoor Bike Simulation` | write |
-| Take / release control, reset | Control Point ops `0x00`, `0x01`, `0x07`, `0x08` | write |
-| Trainer status changes | Fitness Machine Status (0x2ADA) | notify |
-| Supported power / resistance ranges | 0x2AD8 / 0x2AD6 | read once |
+| Need                                            | FTMS characteristic                                | Direction       |
+| ----------------------------------------------- | -------------------------------------------------- | --------------- |
+| Live power, cadence, speed                      | Indoor Bike Data (0x2AD2)                          | notify, ~1–4 Hz |
+| ERG: hold a target power                        | Control Point (0x2AD9) op `0x05 Set Target Power`  | write           |
+| SIM: set road grade / wind / rolling resistance | Control Point op `0x11 Set Indoor Bike Simulation` | write           |
+| Take / release control, reset                   | Control Point ops `0x00`, `0x01`, `0x07`, `0x08`   | write           |
+| Trainer status changes                          | Fitness Machine Status (0x2ADA)                    | notify          |
+| Supported power / resistance ranges             | 0x2AD8 / 0x2AD6                                    | read once       |
 
 Standard opcodes only. We never write to vendor or firmware (DFU/OTA) characteristics; those are explicitly blocklisted in code (section 3).
 
 ### 2.2 Two ways to reach the trainer, and why the devcontainer matters
 
-| | A. Wi-Fi Direct Connect (from the backend, inside the container) | B. Web Bluetooth (from Chrome on the host) |
-| --- | --- | --- |
-| Where the device code runs | Node backend inside the devcontainer | JavaScript in the browser tab |
-| Respects "never run code on my machine" | Yes, fully | Grey area: the browser itself runs on the host |
-| Works from Docker on macOS | Yes for plain TCP to a LAN IP. mDNS discovery does **not** cross Docker's NAT, so we configure the trainer IP | Yes, Chrome on macOS supports Web Bluetooth |
-| Safety supervision (watchdog, logging, caps) | Server-side, always on, testable | Only while the tab is alive |
-| Testability without hardware | Mock trainer server in the container | Harder |
-| Protocol risk | Direct Connect is community-documented, not officially published | FTMS is an official Bluetooth spec |
+|                                              | A. Wi-Fi Direct Connect (from the backend, inside the container)                                              | B. Web Bluetooth (from Chrome on the host)     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Where the device code runs                   | Node backend inside the devcontainer                                                                          | JavaScript in the browser tab                  |
+| Respects "never run code on my machine"      | Yes, fully                                                                                                    | Grey area: the browser itself runs on the host |
+| Works from Docker on macOS                   | Yes for plain TCP to a LAN IP. mDNS discovery does **not** cross Docker's NAT, so we configure the trainer IP | Yes, Chrome on macOS supports Web Bluetooth    |
+| Safety supervision (watchdog, logging, caps) | Server-side, always on, testable                                                                              | Only while the tab is alive                    |
+| Testability without hardware                 | Mock trainer server in the container                                                                          | Harder                                         |
+| Protocol risk                                | Direct Connect is community-documented, not officially published                                              | FTMS is an official Bluetooth spec             |
 
 **✅ RECOMMENDED: A as primary, B as a fallback transport.** You already hinted at Wi-Fi, it keeps all device logic in the container where it can be logged and guarded, and it lets us develop against a mock. Both paths speak identical FTMS bytes, so the codec is shared and only the transport differs. If Direct Connect on the Core 2 turns out to behave unexpectedly, we switch the transport without touching the rest of the app.
 
@@ -79,7 +79,7 @@ Safety is designed in as its own module, the **Safety Supervisor**, sitting betw
 
 ### 3.1 Rules enforced in code
 
-1. **Control is off by default.** The backend starts read-only. Writes are only enabled with an explicit flag (`TRAINER_CONTROL=on`) *and* a confirmation click in the UI. Phase 1 has no write path at all.
+1. **Control is off by default.** The backend starts read-only. Writes are only enabled with an explicit flag (`TRAINER_CONTROL=on`) _and_ a confirmation click in the UI. Phase 1 has no write path at all.
 2. **Allowlist, not blocklist.** Only the FTMS control point may be written, with only the opcodes listed in 2.1. Every other characteristic is read/notify only. Firmware/DFU services are refused even if requested.
 3. **Hard caps**, configurable, with conservative defaults: target power ≤ min(150% FTP, 450 W); grade between −10% and +15%; resistance level within the trainer's reported range.
 4. **Ramp limiting.** Target power changes are ramped over ~3 s instead of stepped, so an interval never feels like hitting a wall.
@@ -93,12 +93,12 @@ Safety is designed in as its own module, the **Safety Supervisor**, sitting betw
 
 Each test starts only after you type a go-ahead in chat. I narrate each step before sending it.
 
-| Test | Phase | What I do | What you confirm |
-| --- | --- | --- | --- |
-| HT-1 Read-only | 1 | Connect, list services, subscribe to Indoor Bike Data. No writes. | Pedal; the HUD numbers match the Wahoo app / your feel |
-| HT-2 Control basics | 2 | Request control → ERG 100 W → ERG 150 W → SIM 0% → SIM 3% → safe state | You feel each change and can say "yes" or "no" |
-| HT-3 Kill switches | 2 | Press E-stop mid-effort; then kill the backend process mid-effort | Resistance drops to flat-road feel both times |
-| HT-4 First workout | 3 | Run a 10-minute preset end to end | Intervals change on time, cadence guard works if you stop pedaling |
+| Test                | Phase | What I do                                                              | What you confirm                                                   |
+| ------------------- | ----- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| HT-1 Read-only      | 1     | Connect, list services, subscribe to Indoor Bike Data. No writes.      | Pedal; the HUD numbers match the Wahoo app / your feel             |
+| HT-2 Control basics | 2     | Request control → ERG 100 W → ERG 150 W → SIM 0% → SIM 3% → safe state | You feel each change and can say "yes" or "no"                     |
+| HT-3 Kill switches  | 2     | Press E-stop mid-effort; then kill the backend process mid-effort      | Resistance drops to flat-road feel both times                      |
+| HT-4 First workout  | 3     | Run a 10-minute preset end to end                                      | Intervals change on time, cadence guard works if you stop pedaling |
 
 ---
 
@@ -164,16 +164,26 @@ BikeSIM/
 
 ```ts
 type Workout = {
-  id: string; name: string; category: WorkoutCategory;      // e.g. "sweet-spot"
-  description: string; triathlonPriority: 1 | 2 | 3;         // the ⭐ rating from cycling_presets.md
-  estimatedTSS: number; durationSec: number;
+  id: string;
+  name: string;
+  category: WorkoutCategory; // e.g. "sweet-spot"
+  description: string;
+  triathlonPriority: 1 | 2 | 3; // the ⭐ rating from cycling_presets.md
+  estimatedTSS: number;
+  durationSec: number;
   steps: Step[];
 };
 type Step =
-  | { kind: "steady";  sec: number; target: Target; cadence?: [number, number]; cue?: string }
-  | { kind: "ramp";    sec: number; from: Target; to: Target; cue?: string }
-  | { kind: "repeat";  times: number; steps: Step[] }
-  | { kind: "freeSim"; sec: number; grade: number; cue?: string };    // rider-driven, e.g. sprints
+  | {
+      kind: "steady";
+      sec: number;
+      target: Target;
+      cadence?: [number, number];
+      cue?: string;
+    }
+  | { kind: "ramp"; sec: number; from: Target; to: Target; cue?: string }
+  | { kind: "repeat"; times: number; steps: Step[] }
+  | { kind: "freeSim"; sec: number; grade: number; cue?: string }; // rider-driven, e.g. sprints
 type Target = { pctFtp: number } | { watts: number };
 ```
 
@@ -183,11 +193,11 @@ type Target = { pctFtp: number } | { watts: number };
 
 ## 6. Ride modes and how the road matches the workout
 
-| Mode | Trainer control | Where the resistance comes from | Use |
-| --- | --- | --- | --- |
-| **Structured workout** | ERG | Target power from the step; the trainer holds it regardless of gear/cadence | All presets by default |
-| **Route ride** | SIM | Grade of the road under you; you shift and push like outdoors | Free riding, real roads, hill repeats if you prefer "real" hills |
-| **Free ride** | SIM | Manual grade slider / keyboard | Warm-ups, playing around |
+| Mode                   | Trainer control | Where the resistance comes from                                             | Use                                                              |
+| ---------------------- | --------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **Structured workout** | ERG             | Target power from the step; the trainer holds it regardless of gear/cadence | All presets by default                                           |
+| **Route ride**         | SIM             | Grade of the road under you; you shift and push like outdoors               | Free riding, real roads, hill repeats if you prefer "real" hills |
+| **Free ride**          | SIM             | Manual grade slider / keyboard                                              | Warm-ups, playing around                                         |
 
 For structured workouts, the 3D road is **generated from the workout profile**: each step maps to a road segment whose grade is a function of intensity (recovery ≈ 0–1%, Z2 ≈ 1–2%, sweet spot ≈ 3–4%, threshold ≈ 5–6%, VO₂max ≈ 7–9%). ERG keeps the physical resistance exactly on target while the visuals say "you are climbing". This is how Zwift workouts feel and it keeps the physiology of the preset intact.
 
@@ -236,16 +246,16 @@ Sprints and "max effort" steps cannot be ERG (there is no target). They run as `
 
 Sizes are rough: S = a session, M = a few sessions, L = several sessions.
 
-| Phase | Deliverable | Exit criteria | Hardware |
-| --- | --- | --- | --- |
-| **0 · Foundation** (S) | Devcontainer, monorepo scaffold, CI-style scripts (lint, test), `docs/SAFETY.md`, mock trainer | `pnpm dev` serves a hello page from the container in your browser; `nc` reaches the trainer's port | TCP open/close only |
-| **1 · Read the trainer** (M) | Direct Connect transport, FTMS decoder, diagnostics screen, plain-text live HUD | HT-1 passes: live power/cadence/speed while you pedal, matches the Wahoo app | Read-only |
-| **2 · Control + safety** (M) | Control point encoder, Safety Supervisor, watchdog, E-stop, audit log, arming UI | HT-2 and HT-3 pass; every rule in 3.1 has an automated test against the mock | ERG / SIM writes, supervised |
-| **3 · Workouts** (M) | Workout engine (steps, ramps, repeats, bias), preset library from `cycling_presets.md` + FTP tests, library / start / countdown / ride HUD screens, session recording | HT-4 passes; you finish a real 10–20 min preset with correct transitions | Full workouts |
-| **4 · Minimal 3D** (M) | Procedural road matched to the workout, POV camera, terrain, sky, virtual speed physics | You ride a full workout on the 3D screen at ≥ 60 fps and it "feels like moving" | Same as 3 |
-| **5 · Records & export** (S–M) | SQLite history, summary screen with NP/IF/TSS and best efforts, FIT export accepted by Strava | A BikeSIM ride shows up correctly in Strava after manual upload | — |
-| **6 · Polish & realism** (L) | Blender assets (bike, roadside), lighting/time-of-day, post-processing, sound, cadence bob, HR monitor support | Screenshots you would be happy to show someone | Optional HRM |
-| **7 · Real roads** (L) | GPX import, elevation, DEM terrain, Oaxaca asset pack, SIM-mode route rides, route library | You ride Monte Albán from your living room | SIM |
+| Phase                          | Deliverable                                                                                                                                                           | Exit criteria                                                                                      | Hardware                     |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------- |
+| **0 · Foundation** (S)         | Devcontainer, monorepo scaffold, CI-style scripts (lint, test), `docs/SAFETY.md`, mock trainer                                                                        | `pnpm dev` serves a hello page from the container in your browser; `nc` reaches the trainer's port | TCP open/close only          |
+| **1 · Read the trainer** (M)   | Direct Connect transport, FTMS decoder, diagnostics screen, plain-text live HUD                                                                                       | HT-1 passes: live power/cadence/speed while you pedal, matches the Wahoo app                       | Read-only                    |
+| **2 · Control + safety** (M)   | Control point encoder, Safety Supervisor, watchdog, E-stop, audit log, arming UI                                                                                      | HT-2 and HT-3 pass; every rule in 3.1 has an automated test against the mock                       | ERG / SIM writes, supervised |
+| **3 · Workouts** (M)           | Workout engine (steps, ramps, repeats, bias), preset library from `cycling_presets.md` + FTP tests, library / start / countdown / ride HUD screens, session recording | HT-4 passes; you finish a real 10–20 min preset with correct transitions                           | Full workouts                |
+| **4 · Minimal 3D** (M)         | Procedural road matched to the workout, POV camera, terrain, sky, virtual speed physics                                                                               | You ride a full workout on the 3D screen at ≥ 60 fps and it "feels like moving"                    | Same as 3                    |
+| **5 · Records & export** (S–M) | SQLite history, summary screen with NP/IF/TSS and best efforts, FIT export accepted by Strava                                                                         | A BikeSIM ride shows up correctly in Strava after manual upload                                    | —                            |
+| **6 · Polish & realism** (L)   | Blender assets (bike, roadside), lighting/time-of-day, post-processing, sound, cadence bob, HR monitor support                                                        | Screenshots you would be happy to show someone                                                     | Optional HRM                 |
+| **7 · Real roads** (L)         | GPX import, elevation, DEM terrain, Oaxaca asset pack, SIM-mode route rides, route library                                                                            | You ride Monte Albán from your living room                                                         | SIM                          |
 
 Phases 0–3 are the functional core and are strictly sequential. Phase 4 can start in parallel with 3 once the telemetry stream exists. 5–7 are ordered by value but flexible.
 
@@ -264,15 +274,15 @@ Phases 0–3 are the functional core and are strictly sequential. Phase 4 can st
 
 ## 11. Risks and mitigations
 
-| Risk | Likelihood | Mitigation |
-| --- | --- | --- |
-| Docker on macOS cannot reach the trainer's LAN IP | Low–medium | Day-one `nc` test; fallback to Web Bluetooth transport in the browser |
-| Direct Connect details differ on Core 2 firmware | Medium | Read-only discovery first, diagnostics screen, byte-level logging, FTMS spec is the same either way |
-| Wahoo app keeps control of the trainer | Medium | Close it during sessions (Decision 2); detect and warn when control requests are refused |
-| ERG spiral of death / uncomfortable jumps | Medium | Cadence guard, ramp limiting, ±bias, E-stop |
-| Any command that could harm the device | Very low | Standard FTMS opcodes only, allowlist, no vendor/DFU writes, caps on every value |
-| 3D performance or motion discomfort | Low | Quality slider, camera bob toggle, stable horizon |
-| Scope creep (this doc is already ambitious) | High | Phase gates; nothing from section 12 starts before Phase 3 passes HT-4 |
+| Risk                                              | Likelihood | Mitigation                                                                                          |
+| ------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| Docker on macOS cannot reach the trainer's LAN IP | Low–medium | Day-one `nc` test; fallback to Web Bluetooth transport in the browser                               |
+| Direct Connect details differ on Core 2 firmware  | Medium     | Read-only discovery first, diagnostics screen, byte-level logging, FTMS spec is the same either way |
+| Wahoo app keeps control of the trainer            | Medium     | Close it during sessions (Decision 2); detect and warn when control requests are refused            |
+| ERG spiral of death / uncomfortable jumps         | Medium     | Cadence guard, ramp limiting, ±bias, E-stop                                                         |
+| Any command that could harm the device            | Very low   | Standard FTMS opcodes only, allowlist, no vendor/DFU writes, caps on every value                    |
+| 3D performance or motion discomfort               | Low        | Quality slider, camera bob toggle, stable horizon                                                   |
+| Scope creep (this doc is already ambitious)       | High       | Phase gates; nothing from section 12 starts before Phase 3 passes HT-4                              |
 
 ---
 
@@ -313,15 +323,15 @@ Reply by number, one line each is enough.
 
 ## Appendix A — FTMS control point quick reference
 
-| Opcode | Name | Payload | Notes |
-| --- | --- | --- | --- |
-| 0x00 | Request Control | — | Must succeed before any other write |
-| 0x01 | Reset | — | Returns trainer to defaults; used on shutdown |
-| 0x04 | Set Target Resistance Level | uint8 (0.1 units) | Not used in v1 |
-| 0x05 | Set Target Power | int16 W | ERG mode |
-| 0x07 | Start / Resume | — | |
-| 0x08 | Stop / Pause | uint8 (1 stop, 2 pause) | |
-| 0x11 | Set Indoor Bike Simulation | int16 wind (0.001 m/s), int16 grade (0.01 %), uint8 Crr (0.0001), uint8 Cw (0.01 kg/m) | SIM mode |
+| Opcode | Name                        | Payload                                                                                | Notes                                         |
+| ------ | --------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 0x00   | Request Control             | —                                                                                      | Must succeed before any other write           |
+| 0x01   | Reset                       | —                                                                                      | Returns trainer to defaults; used on shutdown |
+| 0x04   | Set Target Resistance Level | uint8 (0.1 units)                                                                      | Not used in v1                                |
+| 0x05   | Set Target Power            | int16 W                                                                                | ERG mode                                      |
+| 0x07   | Start / Resume              | —                                                                                      |                                               |
+| 0x08   | Stop / Pause                | uint8 (1 stop, 2 pause)                                                                |                                               |
+| 0x11   | Set Indoor Bike Simulation  | int16 wind (0.001 m/s), int16 grade (0.01 %), uint8 Crr (0.0001), uint8 Cw (0.01 kg/m) | SIM mode                                      |
 
 Responses arrive as indications on the same characteristic: `0x80, requestOpcode, resultCode` (0x01 success, 0x02 not supported, 0x03 invalid parameter, 0x04 operation failed, 0x05 control not permitted).
 
@@ -333,22 +343,22 @@ Responses arrive as indications on the same characteristic: `0x80, requestOpcode
 
 ## Appendix C — Preset library (first draft, from cycling_presets.md)
 
-| Category | Presets | Default mode |
-| --- | --- | --- |
-| Recovery | 30 / 45 / 60 min Z1 | ERG |
-| Endurance / Z2 | 60 / 90 / 120 / 180 min, 55–75% FTP, fueling reminders on the long ones | ERG |
-| Tempo | 3 × 20 min @ 80% | ERG |
-| Sweet Spot | 3 × 15 @ 90%; 2 × 30 @ 88–90% | ERG |
-| Threshold | 4 × 8 @ 100%; 3 × 12 @ 100%; 2 × 20 @ 95–100% | ERG |
-| VO₂max | 5 × 4 min @ 115%, 4 min easy | ERG |
-| Anaerobic | 10 × 30/30 @ 150%; 6 × 1 min @ 140% | ERG |
-| Sprint / neuromuscular | 6 × 10 s max, 3–5 min easy | freeSim |
-| Torque / low cadence | 5 × 5 min @ 85% at 55–65 rpm | ERG + cadence band |
-| Cadence drills | 5 × 1 min at 110–120 rpm, low power | ERG + cadence band |
-| Hill repeats | 6 × 5 min uphill @ 100–105% | ERG (SIM optional) |
-| Over-unders | 4 × (2 min @ 105% / 2 min @ 90%) | ERG |
-| Attacks | 60 min @ 80% with 30 s @ 150% every 5 min | ERG |
-| Race pace | 3 × 20 min @ race power (default 80% FTP) | ERG |
-| Brick | 90 min bike (Z2 + race-pace block) → run timer | ERG |
-| Long ride | 3 h Z2 with fueling reminders | ERG |
-| FTP tests | 20-min test; ramp test | ERG / freeSim |
+| Category               | Presets                                                                 | Default mode       |
+| ---------------------- | ----------------------------------------------------------------------- | ------------------ |
+| Recovery               | 30 / 45 / 60 min Z1                                                     | ERG                |
+| Endurance / Z2         | 60 / 90 / 120 / 180 min, 55–75% FTP, fueling reminders on the long ones | ERG                |
+| Tempo                  | 3 × 20 min @ 80%                                                        | ERG                |
+| Sweet Spot             | 3 × 15 @ 90%; 2 × 30 @ 88–90%                                           | ERG                |
+| Threshold              | 4 × 8 @ 100%; 3 × 12 @ 100%; 2 × 20 @ 95–100%                           | ERG                |
+| VO₂max                 | 5 × 4 min @ 115%, 4 min easy                                            | ERG                |
+| Anaerobic              | 10 × 30/30 @ 150%; 6 × 1 min @ 140%                                     | ERG                |
+| Sprint / neuromuscular | 6 × 10 s max, 3–5 min easy                                              | freeSim            |
+| Torque / low cadence   | 5 × 5 min @ 85% at 55–65 rpm                                            | ERG + cadence band |
+| Cadence drills         | 5 × 1 min at 110–120 rpm, low power                                     | ERG + cadence band |
+| Hill repeats           | 6 × 5 min uphill @ 100–105%                                             | ERG (SIM optional) |
+| Over-unders            | 4 × (2 min @ 105% / 2 min @ 90%)                                        | ERG                |
+| Attacks                | 60 min @ 80% with 30 s @ 150% every 5 min                               | ERG                |
+| Race pace              | 3 × 20 min @ race power (default 80% FTP)                               | ERG                |
+| Brick                  | 90 min bike (Z2 + race-pace block) → run timer                          | ERG                |
+| Long ride              | 3 h Z2 with fueling reminders                                           | ERG                |
+| FTP tests              | 20-min test; ramp test                                                  | ERG / freeSim      |
