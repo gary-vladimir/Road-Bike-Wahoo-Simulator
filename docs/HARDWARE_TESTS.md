@@ -1,5 +1,11 @@
 # Hardware validation log
 
+## September 30 — Monte Albán with automatic SIM, rider-confirmed
+
+The rider rode 7.46 km of Monte Albán with **Trainer sets the slope**, including a pause and resume on the 7% ramp, finished, and uploaded the FIT to Strava successfully. The rider reports that everything worked. This is the first physical ride of the new control lifecycle: SIM start, slope following up to about 9%, a pause and resume, and the finish. The [ride review](MONTE_ALBAN_RIDE_REVIEW.md) finds the FIT valid and consistent with the route and the physics model. It also led to three export fixes (file name accents, description truncation, duration rounding).
+
+Still unconfirmed from evidence: the control log in the session JSON (flat hold during the pause, release without Stop at the finish), ERG recovery on low cadence, trainer difficulty below 100%, and the manual check's two endings.
+
 ## September 29 — new control lifecycle awaiting a physical check
 
 Trainer control was rebuilt (see [implementation status](IMPLEMENTATION_STATUS.md)). What the rider confirmed earlier still describes the hardware: read-only telemetry, SIM slope response, complete controlled SIM rides with pause/resume, and manual Strava import. The new behavior has only been exercised against a synthetic KICKR:

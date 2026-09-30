@@ -1,5 +1,11 @@
 # Implementation status and decisions
 
+## September 30 — first real-road ride reviewed; export fixes
+
+The rider rode Monte Albán with automatic SIM and uploaded it to Strava. The FIT decodes cleanly, every total recomputes, the positions, altitude and grade follow the route, and re-simulating the ride from its power with the app's physics reproduces the distance within 2.4 m over 7.46 km ([review](MONTE_ALBAN_RIDE_REVIEW.md)). The review found three presentation defects, now fixed: accents became separators in file names (`Monte-Alba-n`), the 254-byte FIT description was cut mid-word, and durations rounded up (25:25 in BikeSIM, 25:24 on Strava). Elapsed times now round down like a stopwatch; countdowns still round up.
+
+Also since the overhaul entry: three.js and the 3D world load as a separate chunk (the app shell is 524 kB instead of 1.41 MB), with a Suspense boundary inside the canvas so loading textures never hides it; the scene harness can ride forward and show frame pacing (`&speed=30&stats`); FIT session totals and FTP warm-up pause logging gained tests. Verification: 126 unit tests, 16 browser workflows, typecheck, Prettier and the production build pass.
+
 ## September 29 — overhaul: control switch, gentle pauses, physics v3, real roads, new UI
 
 A review of the whole app found the ride camera surging ten times a second, trainer control split across a separate pilot build and four controller classes, an ERG cadence guard that sent FTMS Stop on single 0 rpm glitches, and pauses and finishes that used Stop even though the KICKR then returns to a heavier load. The rider chose the direction for each trainer-facing change (control switch, ERG ride-through, real roads, adjustable difficulty, the Sierra Night design).
