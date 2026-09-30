@@ -9,7 +9,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 await page.goto(
-  `http://localhost:5173/tests/visual/scene.html?route=${route}&distance=${distance}`,
+  `http://localhost:5173/tests/visual/scene.html?route=${route}&distance=${distance}&quality=${quality}`,
 );
 await page.waitForSelector('body[data-ready="true"]', { timeout: 90000 });
 await page.screenshot({
